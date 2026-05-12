@@ -190,11 +190,12 @@ function showFindStats(findStats) {
   $("missing-count").textContent = findStats.missing;
   $("find-result").classList.remove("hidden");
 
+  const skippedEl = $("skipped-metric");
   if (findStats.skipped > 0) {
     $("skipped-count").textContent = findStats.skipped;
-    $("skipped-row").classList.remove("hidden");
+    skippedEl.style.display = "";
   } else {
-    $("skipped-row").classList.add("hidden");
+    skippedEl.style.display = "none";
   }
 
   if (findStats.missingTitles?.length) {
@@ -330,7 +331,7 @@ function resetPanel1() {
   setProgress("find",   0, 1, "");
   setProgress("import", 0, 1, "");
   $("find-result").classList.add("hidden");
-  $("skipped-row").classList.add("hidden");
+  $("skipped-metric").style.display = "none";
   $("missing-details").classList.add("hidden");
   $("section-import").classList.add("hidden");
   $("import-result").classList.add("hidden");

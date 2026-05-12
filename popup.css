@@ -255,8 +255,6 @@ input:focus {
 }
 .badge.green { background: #16a34a; }
 .badge.red   { background: #dc2626; }
-.badge.amber { background: #d97706; }
-.badge.grey  { background: #6b7280; }
 
 .sync-dot {
   display: inline-block;

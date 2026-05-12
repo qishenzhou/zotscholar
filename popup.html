@@ -70,12 +70,19 @@
       </div>
       <div class="progress-label" id="find-label"></div>
       <div id="find-result" class="hidden">
-        <div class="result-row">
-          <span class="badge green" id="found-count">0</span> found on S2
-          <span class="badge red"   id="missing-count">0</span> not found
-        </div>
-        <div class="result-row hidden" id="skipped-row">
-          <span class="badge amber" id="skipped-count">0</span> already synced (skipped)
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-value green" id="found-count">0</span>
+            <span class="metric-label">Found on S2</span>
+          </div>
+          <div class="metric" id="skipped-metric" style="display:none">
+            <span class="metric-value grey" id="skipped-count">0</span>
+            <span class="metric-label">Already synced</span>
+          </div>
+          <div class="metric">
+            <span class="metric-value red" id="missing-count">0</span>
+            <span class="metric-label">Not found</span>
+          </div>
         </div>
         <details id="missing-details" class="hidden">
           <summary>Papers not found on Semantic Scholar</summary>

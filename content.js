@@ -124,7 +124,7 @@ if (window.__s2ZoteroExtLoaded) {
           method: "PUT",
           credentials: "include",
           headers: jsonHeaders(),
-          body: JSON.stringify({ recommendationStatus: "On" }),
+          body: JSON.stringify({ recommendationStatus: msg.status ?? "On" }),
         });
         if (!r.ok) throw new Error(`set recommendation HTTP ${r.status}`);
         return { ok: true };
@@ -139,8 +139,9 @@ if (window.__s2ZoteroExtLoaded) {
         return {
           folders: list
             .map(f => ({
-              id:   String(f.id ?? f.folderId ?? f.folder_id ?? ""),
-              name: f.name ?? "",
+              id:                 String(f.id ?? f.folderId ?? f.folder_id ?? ""),
+              name:               f.name ?? "",
+              recommendationStatus: f.recommendationStatus ?? "Off",
             }))
             .filter(f => f.id && f.name),
         };

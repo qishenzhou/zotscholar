@@ -182,29 +182,54 @@ function renderWatchedList(watchedCollections) {
     return;
   }
   container.innerHTML = "";
+
   for (const key of keys) {
     const w = watchedCollections[key];
     const row = document.createElement("div");
     row.className = "watched-row";
 
+    // Info
     const info = document.createElement("div");
     info.className = "watched-info";
-
     const name = document.createElement("strong");
     name.textContent = w.name;
-
     const meta = document.createElement("span");
     meta.className = "watched-meta";
     const count = w.syncedItemKeys?.length ?? 0;
     const ts = w.lastSyncAt ? new Date(w.lastSyncAt).toLocaleString() : "Never";
-    meta.textContent = `${count} papers synced · Last: ${ts}`;
-
+    meta.textContent = `${count} papers · Last sync: ${ts}`;
     info.append(name, meta);
 
-    const btn = document.createElement("button");
-    btn.textContent = "Remove";
-    btn.className = "btn-remove";
-    btn.addEventListener("click", async () => {
+    // Research Feed toggle
+    const feedBtn = document.createElement("button");
+    feedBtn.className = "btn-feed loading";
+    feedBtn.textContent = "Feed: …";
+    feedBtn.dataset.folderId = w.s2FolderId ?? "";
+    feedBtn.dataset.status = "";
+    feedBtn.addEventListener("click", async () => {
+      if (!feedBtn.dataset.folderId || feedBtn.classList.contains("loading")) return;
+      const newStatus = feedBtn.dataset.status === "On" ? "Off" : "On";
+      feedBtn.disabled = true;
+      feedBtn.classList.add("loading");
+      try {
+        await chrome.runtime.sendMessage({
+          type: "TOGGLE_RECOMMENDATION",
+          folderId: feedBtn.dataset.folderId,
+          status: newStatus,
+        });
+        setFeedBtnState(feedBtn, newStatus);
+      } catch {
+        // revert visual — status unchanged
+        setFeedBtnState(feedBtn, feedBtn.dataset.status);
+      }
+      feedBtn.disabled = false;
+    });
+
+    // Remove
+    const removeBtn = document.createElement("button");
+    removeBtn.textContent = "Remove";
+    removeBtn.className = "btn-remove";
+    removeBtn.addEventListener("click", async () => {
       const { watchedCollections: cur = {} } = await chrome.storage.local.get("watchedCollections");
       delete cur[key];
       await chrome.storage.local.set({ watchedCollections: cur });
@@ -214,9 +239,25 @@ function renderWatchedList(watchedCollections) {
       }
     });
 
-    row.append(info, btn);
+    row.append(info, feedBtn, removeBtn);
     container.appendChild(row);
   }
+
+  // Async: fetch real Research Feed statuses from S2 and populate buttons
+  chrome.runtime.sendMessage({ type: "GET_FOLDERS_STATUS" }).then(res => {
+    if (!res?.folders) return;
+    const statusMap = Object.fromEntries(res.folders.map(f => [f.id, f.recommendationStatus]));
+    container.querySelectorAll(".btn-feed").forEach(btn => {
+      const status = statusMap[btn.dataset.folderId];
+      if (status !== undefined) setFeedBtnState(btn, status);
+    });
+  }).catch(() => {});
+}
+
+function setFeedBtnState(btn, status) {
+  btn.dataset.status = status;
+  btn.textContent = `Feed: ${status}`;
+  btn.className = `btn-feed ${status === "On" ? "on" : "off"}`;
 }
 
 // ── Detect existing S2 folders ────────────────────────────────────────────────

@@ -595,6 +595,15 @@ async function handle(msg) {
       return { findStats, importResults };
     }
 
+    case "GET_FOLDERS_STATUS":
+      return s2Op("LIST_FOLDERS");
+
+    case "TOGGLE_RECOMMENDATION": {
+      const { folderId, status } = msg;
+      await s2Op("SET_FOLDER_RECOMMENDATION", { folderId, status });
+      return { ok: true };
+    }
+
     case "ENABLE_RECOMMENDATION": {
       const { folderIds = [] } = msg;
       const results = await Promise.allSettled(

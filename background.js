@@ -14,6 +14,7 @@ const PAPER_TYPES = new Set([
 
 const ANALYTICS_COOKIE = /^(_ga|_gid|_gat|amp_|ajs_|anon_|intercom)/;
 let s2TabCache = null;
+let s2TabCreatedByUs = false;
 
 function sendMessage(tabId, msg) {
   return new Promise((resolve, reject) => {
@@ -63,18 +64,32 @@ async function getReachableS2TabId() {
   if (s2TabCache !== null) {
     if (await pingTab(s2TabCache)) return s2TabCache;
     s2TabCache = null;
+    s2TabCreatedByUs = false;
   }
   const tabs = await chrome.tabs.query({ url: "https://www.semanticscholar.org/*" });
   for (const tab of tabs) {
-    if (await pingTab(tab.id)) { s2TabCache = tab.id; return tab.id; }
+    if (await pingTab(tab.id)) {
+      s2TabCache = tab.id;
+      s2TabCreatedByUs = false;
+      return tab.id;
+    }
   }
   const newTab = await chrome.tabs.create({ url: "https://www.semanticscholar.org/", active: false });
+  s2TabCreatedByUs = true;
   await waitForTabLoad(newTab.id);
   for (let i = 0; i < 8; i++) {
     await delay(500);
     if (await pingTab(newTab.id)) { s2TabCache = newTab.id; return newTab.id; }
   }
   throw new Error("Content script did not respond in the new S2 tab");
+}
+
+function releaseS2Tab() {
+  if (s2TabCache !== null && s2TabCreatedByUs) {
+    chrome.tabs.remove(s2TabCache).catch(() => {});
+    s2TabCache = null;
+    s2TabCreatedByUs = false;
+  }
 }
 
 async function getReachableS2TabIdIfAvailable() {
@@ -592,15 +607,20 @@ async function handle(msg) {
         .map(g => g.folderId);
 
       setJobState({ status: "done", findStats, importTotal: findStats.found, importResults, importedFolderIds });
+      releaseS2Tab();
       return { findStats, importResults };
     }
 
-    case "GET_FOLDERS_STATUS":
-      return s2Op("LIST_FOLDERS");
+    case "GET_FOLDERS_STATUS": {
+      const result = await s2Op("LIST_FOLDERS");
+      releaseS2Tab();
+      return result;
+    }
 
     case "TOGGLE_RECOMMENDATION": {
       const { folderId, status } = msg;
       await s2Op("SET_FOLDER_RECOMMENDATION", { folderId, status });
+      releaseS2Tab();
       return { ok: true };
     }
 
@@ -609,6 +629,7 @@ async function handle(msg) {
       const results = await Promise.allSettled(
         folderIds.map(id => s2Op("SET_FOLDER_RECOMMENDATION", { folderId: id }))
       );
+      releaseS2Tab();
       const failed = results.filter(r => r.status === "rejected").length;
       return { ok: true, enabled: folderIds.length - failed, failed };
     }
@@ -669,6 +690,7 @@ async function handle(msg) {
           errors:   importResults.fail,
         },
       });
+      releaseS2Tab();
       return { findStats, importResults };
     }
 
@@ -701,6 +723,7 @@ async function handle(msg) {
           watchedCollections: { ...watchedCollections, ...added },
         });
       }
+      releaseS2Tab();
       return { detected: Object.keys(added).length, added };
     }
 

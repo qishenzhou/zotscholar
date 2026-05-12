@@ -2,6 +2,10 @@
 
 [English](./README.md) | [中文](./README_CN.md)
 
+![version](https://img.shields.io/github/v/tag/qishenzhou/zotscholar?label=version&color=1a1a6e)
+![Manifest V3](https://img.shields.io/badge/Manifest-V3-4285F4?logo=google-chrome&logoColor=white)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
+
 > 一款自动将 Zotero 文献库与 Semantic Scholar 保持同步的 Chrome 扩展。
 
 ZotScholar 可将你的 Zotero 文献集合导入 Semantic Scholar（S2）Library，并保留文件夹结构，让 S2 能够为每个主题生成**每日论文推荐**。新增到 Zotero 的文献会在后台自动增量同步，无需手动操作。

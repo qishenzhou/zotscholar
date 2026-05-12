@@ -139,10 +139,9 @@ if (window.__s2ZoteroExtLoaded) {
         return {
           folders: list
             .map(f => {
-              // recommendationStatus may be a string, object, or missing
-              const raw = f.recommendationStatus ?? f.recommendation_status;
-              const status = typeof raw === "string" ? raw
-                : (raw?.status ?? raw?.value ?? raw?.name ?? "Off");
+              // recommendationStatus is { id: "On" } when enabled, absent when disabled
+              const raw = f.recommendationStatus;
+              const status = typeof raw === "string" ? raw : (raw?.id ?? "Off");
               return {
                 id:   String(f.id ?? f.folderId ?? f.folder_id ?? ""),
                 name: f.name ?? "",

@@ -9,115 +9,124 @@ const PAPER_TYPES = new Set([
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// S2 tab communication
+// S2 internal API — direct fetch from service worker (no tab needed)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ANALYTICS_COOKIE = /^(_ga|_gid|_gat|amp_|ajs_|anon_|intercom)/;
-let s2TabCache = null;
-let s2TabCreatedByUs = false;
 
-function sendMessage(tabId, msg) {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, msg, r => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-      else if (r?.error)            reject(new Error(r.error));
-      else                          resolve(r);
-    });
+async function getS2Csrf() {
+  for (const name of ["__Host-next-auth.csrf-token", "next-auth.csrf-token"]) {
+    const c = await chrome.cookies.get({ url: "https://www.semanticscholar.org", name });
+    if (c) return decodeURIComponent(c.value).split("|")[0];
+  }
+  return "";
+}
+
+async function s2Api(path, options = {}) {
+  const csrf = await getS2Csrf();
+  const headers = { "Content-Type": "application/json", ...(options.headers ?? {}) };
+  if (csrf) headers["x-csrf-token"] = csrf;
+  return fetch(`https://www.semanticscholar.org${path}`, {
+    ...options,
+    credentials: "include",
+    headers,
   });
-}
-
-function isUnreachable(err) {
-  const m = err.message ?? "";
-  return m.includes("Receiving end does not exist") || m.includes("Could not establish");
-}
-
-async function waitForTabLoad(tabId) {
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
-  if (!tab) throw new Error("Tab not found");
-  if (tab.status === "complete") return;
-  await new Promise((resolve, reject) => {
-    const tid = setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(fn);
-      reject(new Error("S2 tab load timeout"));
-    }, 30000);
-    function fn(id, info) {
-      if (id === tabId && info.status === "complete") {
-        clearTimeout(tid);
-        chrome.tabs.onUpdated.removeListener(fn);
-        resolve();
-      }
-    }
-    chrome.tabs.onUpdated.addListener(fn);
-  });
-}
-
-async function pingTab(tabId) {
-  try {
-    const r = await sendMessage(tabId, { type: "PING" });
-    return r?.pong === true;
-  } catch {
-    return false;
-  }
-}
-
-async function getReachableS2TabId() {
-  if (s2TabCache !== null) {
-    if (await pingTab(s2TabCache)) return s2TabCache;
-    s2TabCache = null;
-    s2TabCreatedByUs = false;
-  }
-  const tabs = await chrome.tabs.query({ url: "https://www.semanticscholar.org/*" });
-  for (const tab of tabs) {
-    if (await pingTab(tab.id)) {
-      s2TabCache = tab.id;
-      s2TabCreatedByUs = false;
-      return tab.id;
-    }
-  }
-  const newTab = await chrome.tabs.create({ url: "https://www.semanticscholar.org/", active: false });
-  s2TabCreatedByUs = true;
-  await waitForTabLoad(newTab.id);
-  for (let i = 0; i < 8; i++) {
-    await delay(500);
-    if (await pingTab(newTab.id)) { s2TabCache = newTab.id; return newTab.id; }
-  }
-  throw new Error("Content script did not respond in the new S2 tab");
-}
-
-function releaseS2Tab() {
-  if (s2TabCache !== null && s2TabCreatedByUs) {
-    chrome.tabs.remove(s2TabCache).catch(() => {});
-    s2TabCache = null;
-    s2TabCreatedByUs = false;
-  }
-}
-
-async function getReachableS2TabIdIfAvailable() {
-  if (s2TabCache !== null && await pingTab(s2TabCache)) return s2TabCache;
-  const tabs = await chrome.tabs.query({ url: "https://www.semanticscholar.org/*" });
-  for (const tab of tabs) {
-    if (await pingTab(tab.id)) { s2TabCache = tab.id; return tab.id; }
-  }
-  return null;
-}
-
-async function s2Op(op, data = {}) {
-  const tabId = await getReachableS2TabId();
-  return sendMessage(tabId, { type: "S2_OP", op, ...data });
 }
 
 async function checkS2Login() {
-  const tabs = await chrome.tabs.query({ url: "https://www.semanticscholar.org/*" });
-  for (const tab of tabs) {
-    if (await pingTab(tab.id)) {
-      try {
-        const res = await sendMessage(tab.id, { type: "S2_OP", op: "CHECK_LOGIN" });
-        if (typeof res?.loggedIn === "boolean") return res.loggedIn;
-      } catch {}
-    }
+  try {
+    const r = await s2Api("/api/1/library/folders");
+    if (r.status === 401 || r.status === 403) return false;
+    return r.ok;
+  } catch {
+    const cookies = await chrome.cookies.getAll({ url: "https://www.semanticscholar.org/" });
+    return cookies.some(c => c.value.length > 50 && !ANALYTICS_COOKIE.test(c.name));
   }
-  const cookies = await chrome.cookies.getAll({ url: "https://www.semanticscholar.org/" });
-  return cookies.some(c => c.value.length > 50 && !ANALYTICS_COOKIE.test(c.name));
+}
+
+async function s2GetOrCreateFolder(folderName) {
+  const r = await s2Api("/api/1/library/folders");
+  if (r.status === 401 || r.status === 403) throw new Error("NOT_LOGGED_IN");
+  if (!r.ok) throw new Error(`folder list HTTP ${r.status}`);
+  const body = await r.json();
+  const list = Array.isArray(body) ? body : (body.folders ?? body.data ?? []);
+  const hit  = list.find(f => (f.name ?? "").toLowerCase() === folderName.toLowerCase());
+  if (hit) {
+    const id = hit.id ?? hit.folderId ?? hit.folder_id;
+    if (id != null) return { folderId: String(id) };
+  }
+  const r2 = await s2Api("/api/1/library/folders", {
+    method: "POST",
+    body: JSON.stringify({ name: folderName }),
+  });
+  if (!r2.ok) throw new Error(`create folder HTTP ${r2.status}: ${await r2.text()}`);
+  const d = await r2.json();
+  const newId = d.id ?? d.folderId ?? d.folder?.id ?? d.data?.id ?? d.data?.folderId;
+  if (newId == null) throw new Error(`folder create: unexpected response: ${JSON.stringify(d)}`);
+  return { folderId: String(newId) };
+}
+
+async function s2AddPaper(paperId, paperTitle, folderId) {
+  const r = await s2Api("/api/1/library/folders/entries/bulk", {
+    method: "POST",
+    body: JSON.stringify({
+      paperId,
+      paperTitle:      paperTitle || "",
+      sourceType:      "Library",
+      folderIds:       [Number(folderId)],
+      annotationState: null,
+    }),
+  });
+  if (r.ok)             return { result: "ok" };
+  if (r.status === 409) return { result: "already" };
+  const text = await r.text().catch(() => "");
+  return { result: "error", status: r.status, detail: text.slice(0, 200) };
+}
+
+async function s2ListFolders() {
+  const r = await s2Api("/api/1/library/folders");
+  if (r.status === 401 || r.status === 403) throw new Error("NOT_LOGGED_IN");
+  if (!r.ok) throw new Error(`folder list HTTP ${r.status}`);
+  const body = await r.json();
+  const list = Array.isArray(body) ? body : (body.folders ?? body.data ?? []);
+  return {
+    folders: list
+      .map(f => {
+        const raw    = f.recommendationStatus;
+        const status = typeof raw === "string" ? raw : (raw?.id ?? "Off");
+        return {
+          id:   String(f.id ?? f.folderId ?? f.folder_id ?? ""),
+          name: f.name ?? "",
+          recommendationStatus: status,
+        };
+      })
+      .filter(f => f.id && f.name),
+  };
+}
+
+async function s2SetFolderRecommendation(folderId, status = "On") {
+  const r = await s2Api(`/api/1/library/folders/${folderId}`, {
+    method: "PUT",
+    body: JSON.stringify({ recommendationStatus: status }),
+  });
+  if (!r.ok) throw new Error(`set recommendation HTTP ${r.status}`);
+  return { ok: true };
+}
+
+async function s2SearchPaper(query) {
+  try {
+    const r = await s2Api(`/api/1/paper/search?q=${encodeURIComponent(query)}&limit=10`);
+    if (!r.ok) return { papers: [] };
+    const body = await r.json();
+    const raw  = body.data ?? body.results ?? body.papers ?? [];
+    return {
+      papers: raw
+        .map(p => ({ paperId: p.paperId ?? p.id ?? "", title: p.title ?? "" }))
+        .filter(p => p.paperId),
+    };
+  } catch {
+    return { papers: [] };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -307,12 +316,9 @@ async function findS2Id(paper, s2ApiKey) {
   } catch {}
 
   try {
-    const tabId = await getReachableS2TabIdIfAvailable();
-    if (tabId) {
-      const { papers } = await sendMessage(tabId, { type: "S2_OP", op: "SEARCH_PAPER", query: cleanTitle });
-      const hit = checkResults(papers ?? [], true);
-      if (hit) return hit;
-    }
+    const { papers } = await s2SearchPaper(cleanTitle);
+    const hit = checkResults(papers ?? [], true);
+    if (hit) return hit;
   } catch {}
 
   for (let qi = 0; qi < queries.length; qi++) {
@@ -438,7 +444,7 @@ async function runSyncPipeline({ zoteroId, zoteroKey, s2Key, groups, watchedColl
   for (const group of resultGroups) {
     if (!group.found.length) continue;
 
-    const { folderId } = await s2Op("GET_OR_CREATE_FOLDER", { folderName: group.name });
+    const { folderId } = await s2GetOrCreateFolder(group.name);
     group.folderId = folderId;
 
     for (let i = 0; i < group.found.length; i++) {
@@ -450,9 +456,7 @@ async function runSyncPipeline({ zoteroId, zoteroKey, s2Key, groups, watchedColl
         importFolderName: group.name,
       });
       try {
-        const { result } = await s2Op("ADD_PAPER", {
-          paperId: paper.id, paperTitle: paper.title, folderId,
-        });
+        const { result } = await s2AddPaper(paper.id, paper.title, folderId);
         if (result === "ok") {
           ok++;
           group.newlySyncedKeys.push(paper.zoteroKey);
@@ -607,29 +611,23 @@ async function handle(msg) {
         .map(g => g.folderId);
 
       setJobState({ status: "done", findStats, importTotal: findStats.found, importResults, importedFolderIds });
-      releaseS2Tab();
       return { findStats, importResults };
     }
 
-    case "GET_FOLDERS_STATUS": {
-      const result = await s2Op("LIST_FOLDERS");
-      releaseS2Tab();
-      return result;
-    }
+    case "GET_FOLDERS_STATUS":
+      return s2ListFolders();
 
     case "TOGGLE_RECOMMENDATION": {
       const { folderId, status } = msg;
-      await s2Op("SET_FOLDER_RECOMMENDATION", { folderId, status });
-      releaseS2Tab();
+      await s2SetFolderRecommendation(folderId, status);
       return { ok: true };
     }
 
     case "ENABLE_RECOMMENDATION": {
       const { folderIds = [] } = msg;
       const results = await Promise.allSettled(
-        folderIds.map(id => s2Op("SET_FOLDER_RECOMMENDATION", { folderId: id }))
+        folderIds.map(id => s2SetFolderRecommendation(id))
       );
-      releaseS2Tab();
       const failed = results.filter(r => r.status === "rejected").length;
       return { ok: true, enabled: folderIds.length - failed, failed };
     }
@@ -690,7 +688,6 @@ async function handle(msg) {
           errors:   importResults.fail,
         },
       });
-      releaseS2Tab();
       return { findStats, importResults };
     }
 
@@ -700,7 +697,7 @@ async function handle(msg) {
       const { collections: allCollections = [], watchedCollections = {} } =
         await getStorage(["collections", "watchedCollections"]);
 
-      const { folders } = await s2Op("LIST_FOLDERS");
+      const { folders } = await s2ListFolders();
       // Build a name → folder map (lower-cased for matching)
       const s2ByName = {};
       for (const f of folders) s2ByName[f.name.toLowerCase()] = f;
@@ -723,7 +720,6 @@ async function handle(msg) {
           watchedCollections: { ...watchedCollections, ...added },
         });
       }
-      releaseS2Tab();
       return { detected: Object.keys(added).length, added };
     }
 

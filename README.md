@@ -84,6 +84,14 @@ Settings shows every collection that has been imported at least once. For each c
 
 ---
 
+## Contributors
+
+<a href="https://github.com/qishenzhou/zotscholar/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=qishenzhou/zotscholar" />
+</a>
+
+---
+
 ## Version history
 
 | Version | Highlights |

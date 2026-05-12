@@ -255,9 +255,11 @@ function renderWatchedList(watchedCollections) {
 }
 
 function setFeedBtnState(btn, status) {
-  btn.dataset.status = status;
-  btn.textContent = `Feed: ${status}`;
-  btn.className = `btn-feed ${status === "On" ? "on" : "off"}`;
+  const s = typeof status === "string" ? status
+    : (status?.status ?? status?.value ?? status?.name ?? "Off");
+  btn.dataset.status = s;
+  btn.textContent = `Feed: ${s}`;
+  btn.className = `btn-feed ${s === "On" ? "on" : "off"}`;
 }
 
 // ── Detect existing S2 folders ────────────────────────────────────────────────

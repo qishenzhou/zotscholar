@@ -138,11 +138,17 @@ if (window.__s2ZoteroExtLoaded) {
         const list = Array.isArray(body) ? body : (body.folders ?? body.data ?? []);
         return {
           folders: list
-            .map(f => ({
-              id:                 String(f.id ?? f.folderId ?? f.folder_id ?? ""),
-              name:               f.name ?? "",
-              recommendationStatus: f.recommendationStatus ?? "Off",
-            }))
+            .map(f => {
+              // recommendationStatus may be a string, object, or missing
+              const raw = f.recommendationStatus ?? f.recommendation_status;
+              const status = typeof raw === "string" ? raw
+                : (raw?.status ?? raw?.value ?? raw?.name ?? "Off");
+              return {
+                id:   String(f.id ?? f.folderId ?? f.folder_id ?? ""),
+                name: f.name ?? "",
+                recommendationStatus: status,
+              };
+            })
             .filter(f => f.id && f.name),
         };
       }

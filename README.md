@@ -1,5 +1,7 @@
 # ZotScholar
 
+[English](./README.md) | [中文](./README_CN.md)
+
 > A Chrome extension that keeps your Semantic Scholar Library in sync with Zotero — automatically.
 
 ZotScholar imports your Zotero collections into Semantic Scholar, preserving folder structure so S2 can generate **daily paper recommendations** for each topic. New papers added to Zotero are picked up incrementally in the background.

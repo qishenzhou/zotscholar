@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Zotero → Semantic Scholar",
+  "name": "ZotScholar",
   "version": "1.5.0",
-  "description": "Import Zotero collections into your Semantic Scholar Library, preserving folder structure.",
+  "description": "Import your Zotero collections into Semantic Scholar, preserving folder structure.",
+
+  "icons": {
+    "16":  "icon16.png",
+    "48":  "icon48.png",
+    "128": "icon128.png"
+  },
 
   "options_ui": {
     "page": "options.html",
@@ -29,6 +35,11 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Zotero → Semantic Scholar"
+    "default_title": "ZotScholar",
+    "default_icon": {
+      "16":  "icon16.png",
+      "48":  "icon48.png",
+      "128": "icon128.png"
+    }
   }
 }

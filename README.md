@@ -1,33 +1,31 @@
-# Zotero → Semantic Scholar  (Chrome Extension)
+# ZotScholar  (Chrome Extension)
 
-Import a Zotero collection into your Semantic Scholar Library folder with one click,
-so S2 can generate **daily paper recommendations** for that topic.
+Import Zotero collections into your Semantic Scholar Library with one click,
+preserving folder structure so S2 can generate **daily paper recommendations** for each topic.
 
 ---
 
-## Install (for you or anyone you share it with)
+## Install
 
 1. Download / clone this folder
-2. Open Chrome → address bar → `chrome://extensions`
+2. Open Chrome → `chrome://extensions`
 3. Toggle **Developer mode** ON (top-right)
 4. Click **Load unpacked** → select the `zotero_to_s2_extension` folder
-5. The 📚 icon appears in your toolbar
+5. The ZotScholar icon appears in your toolbar
 
 > **Share with others**: zip up this folder and send the `.zip`.
-> They unzip and follow the same 4 steps above.
+> They unzip and follow the same steps above.
 
 ---
 
 ## Usage
 
-1. Click the 📚 toolbar icon
-2. **Step 1 — Credentials**: enter your Zotero Library ID + API key
-   (+ optional S2 API key for faster lookups)
-3. **Step 2 — Collection**: pick a Zotero collection, set the S2 folder name
-4. **Step 3**: extension searches Semantic Scholar for each paper
-5. **Step 4**: papers are added to your S2 Library folder automatically
-
-Credentials are saved locally — no need to re-enter them next time.
+1. Click the ZotScholar toolbar icon
+2. Click **⚙ Settings** and enter your credentials (one-time setup)
+3. Back in the popup, pick one or more Zotero collections from the tree
+4. Click **Start Import →** — ZotScholar finds each paper on S2 and imports it into a matching folder
+5. The popup can be closed while the job runs; reopening it resumes the progress view
+6. Click **Done** when finished to return to the collection picker
 
 ---
 
@@ -35,9 +33,11 @@ Credentials are saved locally — no need to re-enter them next time.
 
 | Credential | Where |
 |---|---|
-| **Zotero Library ID** | zotero.org → Settings → Feeds/API → "Your userID" |
+| **Zotero Library ID** | zotero.org → Account → Settings → Security → "Your userID for API" |
 | **Zotero API key** | Same page → Create new private key (read-only is enough) |
-| **S2 API key** *(optional)* | semanticscholar.org/product/api — free, higher rate limit |
+| **S2 API key** *(optional)* | semanticscholar.org/product/api — free tier, higher rate limit |
+
+You must also be **logged in to Semantic Scholar** in the same Chrome profile.
 
 ---
 
@@ -54,7 +54,7 @@ Credentials are saved locally — no need to re-enter them next time.
 
 ## How it works
 
-1. Reads collections & papers from the **Zotero Web API**
-2. Resolves each paper to a Semantic Scholar ID via the **S2 Graph API** (DOI first, then title search)
-3. Uses Chrome's `cookies` permission to read your S2 session — no login required
-4. Calls S2's internal library API to bulk-add papers to your folder
+1. Reads collections & papers from the **Zotero Web API** (with full sub-folder expansion)
+2. Resolves each paper to a Semantic Scholar ID via DOI lookup, OpenAlex, and S2 title search
+3. Uses Chrome's `cookies` permission to authenticate with your S2 session
+4. Creates one S2 Library folder per Zotero collection and bulk-adds papers into each

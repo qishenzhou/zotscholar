@@ -72,7 +72,10 @@
       <div id="find-result" class="hidden">
         <div class="result-row">
           <span class="badge green" id="found-count">0</span> found on S2
-          <span class="badge red"   id="missing-count">0</span> not found (skipped)
+          <span class="badge red"   id="missing-count">0</span> not found
+        </div>
+        <div class="result-row hidden" id="skipped-row">
+          <span class="badge amber" id="skipped-count">0</span> already synced (skipped)
         </div>
         <details id="missing-details" class="hidden">
           <summary>Papers not found on Semantic Scholar</summary>

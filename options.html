@@ -117,6 +117,44 @@
     .msg { font-size: 12px; margin-top: 6px; }
     .msg.ok { color: #16a34a; }
     .msg.error { color: #b91c1c; }
+
+    select {
+      padding: 7px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      background: white;
+      color: #111827;
+      cursor: pointer;
+      outline: none;
+    }
+    select:focus { border-color: #1a1a6e; box-shadow: 0 0 0 2px rgba(26,26,110,0.12); }
+
+    .watched-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      margin-top: 6px;
+      background: #fafafa;
+      gap: 10px;
+    }
+    .watched-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .watched-info strong { font-size: 13px; color: #111827; }
+    .watched-meta { font-size: 11px; color: #6b7280; }
+    .btn-remove {
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #b91c1c;
+      border-color: #fca5a5;
+      background: #fef2f2;
+      flex-shrink: 0;
+    }
+    .btn-remove:hover { background: #fee2e2; }
+    .sync-now-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    #last-auto-sync { margin-top: 6px; }
     .hidden { display: none !important; }
 
     .actions {
@@ -183,6 +221,33 @@
     <button class="btn-primary" id="btn-save">Save Settings</button>
     <span id="save-status" class="hidden"></span>
   </div>
+
+  <!-- Auto-sync -->
+  <section>
+    <h2>Auto-sync</h2>
+    <div class="field">
+      <label for="sync-interval">Check for new papers every</label>
+      <select id="sync-interval">
+        <option value="0">Off</option>
+        <option value="60">1 hour</option>
+        <option value="360">6 hours</option>
+        <option value="1440">24 hours</option>
+      </select>
+      <p class="hint">Only previously imported collections are auto-synced. New collections must be imported manually first.</p>
+    </div>
+    <div class="sync-now-row">
+      <button id="btn-sync-now">Sync Now</button>
+      <span id="sync-now-status" class="msg hidden"></span>
+    </div>
+    <div id="last-auto-sync" class="msg hidden"></div>
+  </section>
+
+  <!-- Watched collections -->
+  <section>
+    <h2>Watched Collections</h2>
+    <p class="hint" style="margin-bottom:8px">Collections that have been imported at least once. Auto-sync runs on these.</p>
+    <div id="watched-list"><span style="color:#9ca3af;font-size:12px">No collections watched yet.</span></div>
+  </section>
 
   <script src="options.js"></script>
 </body>

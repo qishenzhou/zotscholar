@@ -40,7 +40,8 @@ function clearJobState() {
 // Collection tree
 // ─────────────────────────────────────────────────────────────────────────────
 
-let cachedCollections = [];
+let cachedCollections  = [];
+let cachedWatched      = {};
 
 function buildTree(collections) {
   const map = {};
@@ -82,7 +83,14 @@ function renderTreeNode(node, parentKey) {
   lbl.title     = `${node.name} — ${node.count} direct item(s)`;
   lbl.textContent = `${node.name}  (${node.count})`;
 
-  row.append(toggle, cb, lbl);
+  const els = [toggle, cb, lbl];
+  if (cachedWatched[node.key]) {
+    const dot = document.createElement("span");
+    dot.className = "sync-dot";
+    dot.title = "Auto-sync enabled";
+    els.push(dot);
+  }
+  row.append(...els);
   item.appendChild(row);
 
   if (node.children.length) {
@@ -137,8 +145,9 @@ function updateAncestors(parentKey) {
   updateAncestors(parentCb.dataset.parentKey);
 }
 
-function mountTree(collections) {
+function mountTree(collections, watched) {
   cachedCollections = collections;
+  if (watched !== undefined) cachedWatched = watched;
   const container = $("collection-tree");
   container.innerHTML = "";
   for (const root of buildTree(collections)) {
@@ -180,6 +189,13 @@ function showFindStats(findStats) {
   $("found-count").textContent   = findStats.found;
   $("missing-count").textContent = findStats.missing;
   $("find-result").classList.remove("hidden");
+
+  if (findStats.skipped > 0) {
+    $("skipped-count").textContent = findStats.skipped;
+    $("skipped-row").classList.remove("hidden");
+  } else {
+    $("skipped-row").classList.add("hidden");
+  }
 
   if (findStats.missingTitles?.length) {
     $("missing-details").classList.remove("hidden");
@@ -314,6 +330,7 @@ function resetPanel1() {
   setProgress("find",   0, 1, "");
   setProgress("import", 0, 1, "");
   $("find-result").classList.add("hidden");
+  $("skipped-row").classList.add("hidden");
   $("missing-details").classList.add("hidden");
   $("section-import").classList.add("hidden");
   $("import-result").classList.add("hidden");
@@ -392,13 +409,13 @@ function initPanel1() {
   initPanel0();
   initPanel1();
 
-  const saved = await loadStorage(["zoteroId", "zoteroKey", "s2Key", "collections", "jobState"]);
+  const saved = await loadStorage(["zoteroId", "zoteroKey", "s2Key", "collections", "jobState", "watchedCollections"]);
+  cachedWatched = saved.watchedCollections ?? {};
 
   // ── If a job is active, go straight to panel 1 ──────────────────────────
   if (saved.jobState && saved.jobState.status !== "cancelled") {
-    // Restore collection tree in background (for when user returns to panel 0)
     if (saved.collections?.length) {
-      mountTree(saved.collections);
+      mountTree(saved.collections, cachedWatched);
     }
     showPanel(1);
     renderJobState(saved.jobState);
@@ -420,8 +437,7 @@ function initPanel1() {
   showPanel(0);
 
   if (saved.collections?.length) {
-    // Use cached tree immediately, then silently refresh in background
-    mountTree(saved.collections);
+    mountTree(saved.collections, cachedWatched);
     chrome.runtime.sendMessage({
       type: "GET_COLLECTIONS",
       libraryId: saved.zoteroId,
@@ -429,7 +445,7 @@ function initPanel1() {
     }).then(res => {
       if (!res.error && res.collections?.length) {
         chrome.storage.local.set({ collections: res.collections });
-        mountTree(res.collections);
+        mountTree(res.collections, cachedWatched);
       }
     }).catch(() => {});
   } else {

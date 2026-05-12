@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ZotScholar",
-  "version": "1.5.1",
+  "version": "2.0.0",
   "description": "Import your Zotero collections into Semantic Scholar, preserving folder structure.",
 
   "icons": {
@@ -15,7 +15,7 @@
     "open_in_tab": true
   },
 
-  "permissions": ["cookies", "storage", "scripting", "tabs"],
+  "permissions": ["cookies", "storage", "scripting", "tabs", "alarms"],
   "host_permissions": [
     "https://www.semanticscholar.org/*",
     "https://api.semanticscholar.org/*",

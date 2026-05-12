@@ -7,11 +7,17 @@ const ZOTERO_BASE = "https://api.zotero.org";
 
 // ── Load saved values ─────────────────────────────────────────────────────────
 
-chrome.storage.local.get(["zoteroId", "zoteroKey", "s2Key"], items => {
-  if (items.zoteroId)  $("zotero-id").value  = items.zoteroId;
-  if (items.zoteroKey) $("zotero-key").value = items.zoteroKey;
-  if (items.s2Key)     $("s2-key").value     = items.s2Key;
-});
+chrome.storage.local.get(
+  ["zoteroId", "zoteroKey", "s2Key", "syncInterval", "watchedCollections", "lastAutoSync"],
+  items => {
+    if (items.zoteroId)  $("zotero-id").value  = items.zoteroId;
+    if (items.zoteroKey) $("zotero-key").value = items.zoteroKey;
+    if (items.s2Key)     $("s2-key").value     = items.s2Key;
+    $("sync-interval").value = String(items.syncInterval ?? 0);
+    renderWatchedList(items.watchedCollections ?? {});
+    renderLastAutoSync(items.lastAutoSync);
+  }
+);
 
 // ── S2 login status ───────────────────────────────────────────────────────────
 
@@ -133,6 +139,99 @@ $("btn-test-s2-key").addEventListener("click", async () => {
   btn.disabled = false;
   btn.textContent = "Test";
 });
+
+// ── Auto-sync interval ────────────────────────────────────────────────────────
+
+$("sync-interval").addEventListener("change", async () => {
+  const minutes = parseInt($("sync-interval").value, 10);
+  await chrome.storage.local.set({ syncInterval: minutes });
+  chrome.runtime.sendMessage({ type: "SET_SYNC_INTERVAL", minutes }).catch(() => {});
+});
+
+$("btn-sync-now").addEventListener("click", async () => {
+  const btn = $("btn-sync-now");
+  const status = $("sync-now-status");
+  btn.disabled = true;
+  btn.textContent = "Syncing…";
+  status.classList.add("hidden");
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "AUTO_SYNC" });
+    if (res?.error) throw new Error(res.error);
+    const added = res?.importResults?.ok ?? 0;
+    const skipped = res?.findStats?.skipped ?? 0;
+    status.textContent = `✓ Done — ${added} new, ${skipped} skipped`;
+    status.className = "msg ok";
+    // Refresh watched list
+    const { watchedCollections, lastAutoSync } = await chrome.storage.local.get(["watchedCollections", "lastAutoSync"]);
+    renderWatchedList(watchedCollections ?? {});
+    renderLastAutoSync(lastAutoSync);
+  } catch (e) {
+    status.textContent = `✗ ${e.message}`;
+    status.className = "msg error";
+  }
+  status.classList.remove("hidden");
+  btn.disabled = false;
+  btn.textContent = "Sync Now";
+});
+
+function renderWatchedList(watchedCollections) {
+  const container = $("watched-list");
+  const keys = Object.keys(watchedCollections);
+  if (!keys.length) {
+    container.innerHTML = '<span style="color:#9ca3af;font-size:12px">No collections watched yet.</span>';
+    return;
+  }
+  container.innerHTML = "";
+  for (const key of keys) {
+    const w = watchedCollections[key];
+    const row = document.createElement("div");
+    row.className = "watched-row";
+
+    const info = document.createElement("div");
+    info.className = "watched-info";
+
+    const name = document.createElement("strong");
+    name.textContent = w.name;
+
+    const meta = document.createElement("span");
+    meta.className = "watched-meta";
+    const count = w.syncedItemKeys?.length ?? 0;
+    const ts = w.lastSyncAt ? new Date(w.lastSyncAt).toLocaleString() : "Never";
+    meta.textContent = `${count} papers synced · Last: ${ts}`;
+
+    info.append(name, meta);
+
+    const btn = document.createElement("button");
+    btn.textContent = "Remove";
+    btn.className = "btn-remove";
+    btn.addEventListener("click", async () => {
+      const { watchedCollections: cur = {} } = await chrome.storage.local.get("watchedCollections");
+      delete cur[key];
+      await chrome.storage.local.set({ watchedCollections: cur });
+      row.remove();
+      if (!Object.keys(cur).length) {
+        container.innerHTML = '<span style="color:#9ca3af;font-size:12px">No collections watched yet.</span>';
+      }
+    });
+
+    row.append(info, btn);
+    container.appendChild(row);
+  }
+}
+
+function renderLastAutoSync(lastAutoSync) {
+  const el = $("last-auto-sync");
+  if (!lastAutoSync || !el) return;
+  const t = new Date(lastAutoSync.at).toLocaleString();
+  if (lastAutoSync.status === "error") {
+    el.textContent = `Last auto-sync: ${t} — Failed (${lastAutoSync.error})`;
+    el.className = "msg error";
+  } else {
+    el.textContent = `Last auto-sync: ${t} — ${lastAutoSync.added} added, ${lastAutoSync.skipped} skipped, ${lastAutoSync.notFound} not found`;
+    el.className = "msg ok";
+  }
+  el.classList.remove("hidden");
+}
 
 // ── Save ──────────────────────────────────────────────────────────────────────
 

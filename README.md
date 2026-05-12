@@ -86,9 +86,22 @@ Settings shows every collection that has been imported at least once. For each c
 
 ## Contributors
 
-<a href="https://github.com/qishenzhou/zotscholar/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=qishenzhou/zotscholar" />
-</a>
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/qishenzhou">
+        <img src="https://github.com/qishenzhou.png" width="64" style="border-radius:50%" /><br/>
+        <sub><b>qishenzhou</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/BeinuoYang">
+        <img src="https://github.com/BeinuoYang.png" width="64" style="border-radius:50%" /><br/>
+        <sub><b>BeinuoYang</b></sub>
+      </a>
+    </td>
+  </tr>
+</table>
 
 ---
 

@@ -119,6 +119,22 @@ if (window.__s2ZoteroExtLoaded) {
         return { result: "error", status: r.status, step: "bulk", detail: text.slice(0, 200) };
       }
 
+      case "LIST_FOLDERS": {
+        const r = await fetch("/api/1/library/folders", { credentials: "include" });
+        if (r.status === 401 || r.status === 403) throw new Error("NOT_LOGGED_IN");
+        if (!r.ok) throw new Error(`folder list HTTP ${r.status}`);
+        const body = await r.json();
+        const list = Array.isArray(body) ? body : (body.folders ?? body.data ?? []);
+        return {
+          folders: list
+            .map(f => ({
+              id:   String(f.id ?? f.folderId ?? f.folder_id ?? ""),
+              name: f.name ?? "",
+            }))
+            .filter(f => f.id && f.name),
+        };
+      }
+
       case "SEARCH_PAPER": {
         // Search via S2's internal API (same-origin, no separate rate limit)
         try {

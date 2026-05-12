@@ -651,6 +651,37 @@ async function handle(msg) {
     }
 
     // ── Sync interval ───────────────────────────────────────────────────────
+    // ── Auto-detect existing S2 folders that match Zotero collections ──────
+    case "DETECT_WATCHED": {
+      const { collections: allCollections = [], watchedCollections = {} } =
+        await getStorage(["collections", "watchedCollections"]);
+
+      const { folders } = await s2Op("LIST_FOLDERS");
+      // Build a name → folder map (lower-cased for matching)
+      const s2ByName = {};
+      for (const f of folders) s2ByName[f.name.toLowerCase()] = f;
+
+      const added = {};
+      for (const col of allCollections) {
+        if (watchedCollections[col.key]) continue;          // already registered
+        const match = s2ByName[col.name.toLowerCase()];
+        if (!match) continue;
+        added[col.key] = {
+          name:          col.name,
+          s2FolderId:    match.id,
+          lastSyncAt:    null,
+          syncedItemKeys: [],
+        };
+      }
+
+      if (Object.keys(added).length) {
+        await chrome.storage.local.set({
+          watchedCollections: { ...watchedCollections, ...added },
+        });
+      }
+      return { detected: Object.keys(added).length, added };
+    }
+
     case "SET_SYNC_INTERVAL": {
       const { minutes } = msg;
       await chrome.storage.local.set({ syncInterval: minutes });

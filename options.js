@@ -219,6 +219,36 @@ function renderWatchedList(watchedCollections) {
   }
 }
 
+// ── Detect existing S2 folders ────────────────────────────────────────────────
+
+$("btn-detect").addEventListener("click", async () => {
+  const btn    = $("btn-detect");
+  const status = $("detect-status");
+  btn.disabled = true;
+  btn.textContent = "Detecting…";
+  status.classList.add("hidden");
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "DETECT_WATCHED" });
+    if (res?.error) throw new Error(res.error);
+    const n = res?.detected ?? 0;
+    if (n === 0) {
+      status.textContent = "No new matches found (S2 folder names must match Zotero collection names exactly).";
+      status.className = "msg";
+    } else {
+      status.textContent = `✓ Registered ${n} collection${n > 1 ? "s" : ""} as watched.`;
+      status.className = "msg ok";
+      const { watchedCollections } = await chrome.storage.local.get("watchedCollections");
+      renderWatchedList(watchedCollections ?? {});
+    }
+  } catch (e) {
+    status.textContent = `✗ ${e.message}`;
+    status.className = "msg error";
+  }
+  status.classList.remove("hidden");
+  btn.disabled = false;
+  btn.textContent = "Detect existing folders";
+});
+
 function renderLastAutoSync(lastAutoSync) {
   const el = $("last-auto-sync");
   if (!lastAutoSync || !el) return;

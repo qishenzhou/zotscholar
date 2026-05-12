@@ -245,7 +245,15 @@
   <!-- Watched collections -->
   <section>
     <h2>Watched Collections</h2>
-    <p class="hint" style="margin-bottom:8px">Collections that have been imported at least once. Auto-sync runs on these.</p>
+    <p class="hint" style="margin-bottom:8px">
+      Collections that have been imported at least once — auto-sync runs on these.
+      Use <b>Detect</b> to auto-register any Zotero collections whose name matches
+      an existing S2 folder (useful after upgrading from an older version).
+    </p>
+    <div class="sync-now-row" style="margin-bottom:10px">
+      <button id="btn-detect">Detect existing folders</button>
+      <span id="detect-status" class="msg hidden"></span>
+    </div>
     <div id="watched-list"><span style="color:#9ca3af;font-size:12px">No collections watched yet.</span></div>
   </section>
 

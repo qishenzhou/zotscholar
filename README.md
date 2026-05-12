@@ -2,6 +2,7 @@
 
 Import Zotero collections into your Semantic Scholar Library with one click,
 preserving folder structure so S2 can generate **daily paper recommendations** for each topic.
+Supports incremental **auto-sync** — new papers added to Zotero appear in S2 automatically.
 
 ---
 
@@ -20,12 +21,34 @@ preserving folder structure so S2 can generate **daily paper recommendations** f
 
 ## Usage
 
+### First-time setup
 1. Click the ZotScholar toolbar icon
-2. Click **⚙ Settings** and enter your credentials (one-time setup)
-3. Back in the popup, pick one or more Zotero collections from the tree
-4. Click **Start Import →** — ZotScholar finds each paper on S2 and imports it into a matching folder
-5. The popup can be closed while the job runs; reopening it resumes the progress view
-6. Click **Done** when finished to return to the collection picker
+2. Click **⚙ Settings** → enter your Zotero Library ID and API key, then **Save Settings**
+3. Make sure you are **logged in to Semantic Scholar** in the same Chrome profile
+
+### Importing a collection
+1. Pick one or more Zotero collections from the tree in the popup
+2. Click **Start Import →** — ZotScholar resolves each paper on S2 and imports it into a matching folder
+3. When done, optionally click **Enable Research Feed & Done** to turn on daily paper recommendations for that folder
+4. The popup can be closed while the job runs; reopening it resumes the progress view
+
+### Re-importing / incremental update
+- Selecting a collection you have already imported triggers an **incremental sync** — only papers added since the last import are processed
+- The results card shows: **Found on S2** (new) · **Already synced** (skipped) · **Not found**
+
+### Auto-sync
+Set a sync interval in Settings (1 h / 6 h / 24 h).  
+ZotScholar silently checks all **watched collections** in the background and adds any new papers.
+
+---
+
+## Watched Collections & Research Feed
+
+The **Settings → Watched Collections** panel lists every collection that has been imported at least once.
+
+- **Feed toggle** — green = Research Feed enabled for that S2 folder, grey = off.  Click to toggle.
+- **Remove** — stop watching a collection (does not delete the S2 folder or its papers).
+- **Detect existing folders** — if you had S2 folders before installing ZotScholar, this button matches them to your Zotero collections by name and registers them as watched.
 
 ---
 
@@ -58,3 +81,15 @@ You must also be **logged in to Semantic Scholar** in the same Chrome profile.
 2. Resolves each paper to a Semantic Scholar ID via DOI lookup, OpenAlex, and S2 title search
 3. Uses Chrome's `cookies` permission to authenticate with your S2 session
 4. Creates one S2 Library folder per Zotero collection and bulk-adds papers into each
+5. Stores a list of synced Zotero item keys per collection so future imports are incremental
+6. Uses `chrome.alarms` for background auto-sync without keeping a persistent service worker
+
+---
+
+## Version history
+
+| Version | Highlights |
+|---|---|
+| **2.0.0** | Incremental auto-sync, watched collections panel, Research Feed toggle, Detect existing folders, redesigned settings UI |
+| 1.5.1 | ZotScholar rename, new icon, options page |
+| 1.0.0 | Initial release — manual one-shot import |

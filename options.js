@@ -185,47 +185,73 @@ function renderWatchedList(watchedCollections) {
 
   for (const key of keys) {
     const w = watchedCollections[key];
-    const row = document.createElement("div");
-    row.className = "watched-row";
 
-    // Info
+    const card = document.createElement("div");
+    card.className = "watched-card";
+
+    // Top row: name + meta
+    const cardTop = document.createElement("div");
+    cardTop.className = "watched-card-top";
+
     const info = document.createElement("div");
     info.className = "watched-info";
-    const name = document.createElement("strong");
-    name.textContent = w.name;
+    const nameEl = document.createElement("strong");
+    nameEl.textContent = w.name;
     const meta = document.createElement("span");
     meta.className = "watched-meta";
     const count = w.syncedItemKeys?.length ?? 0;
     const ts = w.lastSyncAt ? new Date(w.lastSyncAt).toLocaleString() : "Never";
     meta.textContent = `${count} papers · Last sync: ${ts}`;
-    info.append(name, meta);
+    info.append(nameEl, meta);
+    cardTop.append(info);
 
-    // Research Feed toggle
-    const feedBtn = document.createElement("button");
-    feedBtn.className = "btn-feed loading";
-    feedBtn.textContent = "Feed: …";
-    feedBtn.dataset.folderId = w.s2FolderId ?? "";
-    feedBtn.dataset.status = "";
-    feedBtn.addEventListener("click", async () => {
-      if (!feedBtn.dataset.folderId || feedBtn.classList.contains("loading")) return;
-      const newStatus = feedBtn.dataset.status === "On" ? "Off" : "On";
-      feedBtn.disabled = true;
-      feedBtn.classList.add("loading");
+    // Bottom row: Feed toggle + Remove
+    const cardBottom = document.createElement("div");
+    cardBottom.className = "watched-card-bottom";
+
+    // Toggle switch
+    const switchId = `feed-${key}`;
+    const switchLabel = document.createElement("label");
+    switchLabel.className = "feed-switch loading";
+    switchLabel.htmlFor = switchId;
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = switchId;
+    checkbox.dataset.folderId = w.s2FolderId ?? "";
+    checkbox.dataset.currentStatus = "";
+
+    const slider = document.createElement("span");
+    slider.className = "feed-slider";
+
+    const feedText = document.createElement("span");
+    feedText.className = "feed-label";
+    feedText.textContent = "Feed";
+
+    switchLabel.append(feedText, checkbox, slider);
+
+    checkbox.addEventListener("change", async () => {
+      if (!checkbox.dataset.folderId || switchLabel.classList.contains("loading")) {
+        checkbox.checked = checkbox.dataset.currentStatus === "On";
+        return;
+      }
+      const newStatus = checkbox.checked ? "On" : "Off";
+      switchLabel.classList.add("loading");
+      checkbox.disabled = true;
       try {
         await chrome.runtime.sendMessage({
           type: "TOGGLE_RECOMMENDATION",
-          folderId: feedBtn.dataset.folderId,
+          folderId: checkbox.dataset.folderId,
           status: newStatus,
         });
-        setFeedBtnState(feedBtn, newStatus);
+        setFeedToggleState(switchLabel, checkbox, newStatus);
       } catch {
-        // revert visual — status unchanged
-        setFeedBtnState(feedBtn, feedBtn.dataset.status);
+        setFeedToggleState(switchLabel, checkbox, checkbox.dataset.currentStatus);
       }
-      feedBtn.disabled = false;
+      checkbox.disabled = false;
     });
 
-    // Remove
+    // Remove button
     const removeBtn = document.createElement("button");
     removeBtn.textContent = "Remove";
     removeBtn.className = "btn-remove";
@@ -233,33 +259,36 @@ function renderWatchedList(watchedCollections) {
       const { watchedCollections: cur = {} } = await chrome.storage.local.get("watchedCollections");
       delete cur[key];
       await chrome.storage.local.set({ watchedCollections: cur });
-      row.remove();
+      card.remove();
       if (!Object.keys(cur).length) {
         container.innerHTML = '<span style="color:#9ca3af;font-size:12px">No collections watched yet.</span>';
       }
     });
 
-    row.append(info, feedBtn, removeBtn);
-    container.appendChild(row);
+    cardBottom.append(switchLabel, removeBtn);
+    card.append(cardTop, cardBottom);
+    container.appendChild(card);
   }
 
-  // Async: fetch real Research Feed statuses from S2 and populate buttons
+  // Async: fetch real Research Feed statuses and populate toggles
   chrome.runtime.sendMessage({ type: "GET_FOLDERS_STATUS" }).then(res => {
     if (!res?.folders) return;
     const statusMap = Object.fromEntries(res.folders.map(f => [f.id, f.recommendationStatus]));
-    container.querySelectorAll(".btn-feed").forEach(btn => {
-      const status = statusMap[btn.dataset.folderId];
-      if (status !== undefined) setFeedBtnState(btn, status);
+    container.querySelectorAll("input[data-folder-id]").forEach(checkbox => {
+      const status = statusMap[checkbox.dataset.folderId];
+      if (status !== undefined) {
+        const switchLabel = checkbox.closest(".feed-switch");
+        setFeedToggleState(switchLabel, checkbox, status);
+      }
     });
   }).catch(() => {});
 }
 
-function setFeedBtnState(btn, status) {
-  const s = typeof status === "string" ? status
-    : (status?.status ?? status?.value ?? status?.name ?? "Off");
-  btn.dataset.status = s;
-  btn.textContent = `Feed: ${s}`;
-  btn.className = `btn-feed ${s === "On" ? "on" : "off"}`;
+function setFeedToggleState(switchLabel, checkbox, status) {
+  const s = typeof status === "string" ? status : (status?.id ?? "Off");
+  checkbox.dataset.currentStatus = s;
+  checkbox.checked = s === "On";
+  switchLabel.classList.remove("loading");
 }
 
 // ── Detect existing S2 folders ────────────────────────────────────────────────

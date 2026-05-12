@@ -1,21 +1,4 @@
-// popup.js — UI logic
-
-// ─────────────────────────────────────────────────────────────────────────────
-// State
-// ─────────────────────────────────────────────────────────────────────────────
-
-const state = {
-  step:        0,
-  zoteroId:    "",
-  zoteroKey:   "",
-  s2Key:       "",
-  collections: [],
-  groups:      [],  // [{key, name, found:[{id,title}], missing:[]}] after resolve
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DOM refs
-// ─────────────────────────────────────────────────────────────────────────────
+// popup.js
 
 const $ = id => document.getElementById(id);
 
@@ -24,14 +7,19 @@ const $ = id => document.getElementById(id);
 // ─────────────────────────────────────────────────────────────────────────────
 
 function showPanel(n) {
-  for (let i = 0; i < 4; i++) {
+  [0, 1].forEach(i => {
     $(`panel-${i}`).classList.toggle("hidden", i !== n);
-    const stepEl = document.querySelector(`.step[data-step="${i}"]`);
-    stepEl.classList.remove("active", "done");
-    if (i < n)  stepEl.classList.add("done");
-    if (i === n) stepEl.classList.add("active");
-  }
-  state.step = n;
+    const el = document.querySelector(`.step[data-step="${i}"]`);
+    el.classList.remove("active", "done");
+    if (i < n)  el.classList.add("done");
+    if (i === n) el.classList.add("active");
+  });
+}
+
+function setProgress(id, current, total, label) {
+  const pct = total > 0 ? Math.round(current / total * 100) : 0;
+  $(`${id}-bar`).style.width = `${pct}%`;
+  $(`${id}-label`).textContent = label ?? "";
 }
 
 function setError(id, msg) {
@@ -40,237 +28,19 @@ function setError(id, msg) {
   else       el.classList.add("hidden");
 }
 
-function setProgress(phase, current, total, label) {
-  const pct = total > 0 ? Math.round(current / total * 100) : 0;
-  $(`${phase}-bar`).style.width = `${pct}%`;
-  $(`${phase}-label`).textContent = label ?? "";
+function loadStorage(keys) {
+  return new Promise(r => chrome.storage.local.get(keys, r));
 }
 
-async function sendBg(msg) {
-  return chrome.runtime.sendMessage(msg);
-}
-
-function loadStorage() {
-  return new Promise(resolve => {
-    chrome.storage.local.get(
-      ["zoteroId","zoteroKey","s2Key","pendingImport","importState","collections","resolveState"],
-      items => resolve(items)
-    );
-  });
-}
-
-function saveStorage(data) {
-  chrome.storage.local.set(data);
-}
-
-function clearPendingImport() { chrome.storage.local.remove("pendingImport"); }
-function clearImportState()   { chrome.storage.local.remove("importState"); }
-function clearResolveState()  { chrome.storage.local.remove("resolveState"); }
-
-function displayImportResults(r) {
-  clearPendingImport();
-  setProgress("import", 1, 1, "");
-  $("import-status").textContent = "Import complete!";
-  $("res-ok").textContent      = r.ok;
-  $("res-already").textContent = r.already;
-  $("res-fail").textContent    = r.fail;
-  $("import-result").classList.remove("hidden");
-  if (r.failedIds?.length) {
-    $("failed-section").classList.remove("hidden");
-    const ul = $("failed-list");
-    ul.innerHTML = "";
-    for (const fid of r.failedIds) {
-      const li  = document.createElement("li");
-      const url = `https://www.semanticscholar.org/paper/${fid}`;
-      li.innerHTML = `<a href="${url}" target="_blank">${fid}</a>`;
-      ul.appendChild(li);
-    }
-  }
+function clearJobState() {
+  chrome.storage.local.remove(["jobState", "cancelRequested"]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Polling — resolve
+// Collection tree
 // ─────────────────────────────────────────────────────────────────────────────
 
-function pollResolveState() {
-  const POLL_MS  = 1000;
-  const STALE_MS = 120000;
-
-  const timer = setInterval(async () => {
-    const { resolveState, pendingImport } = await new Promise(r =>
-      chrome.storage.local.get(["resolveState", "pendingImport"], r)
-    );
-
-    if (!resolveState || resolveState.status !== "running") {
-      clearInterval(timer);
-      clearResolveState();
-      if (pendingImport?.groups?.length) {
-        state.groups = pendingImport.groups;
-        showResolveResults(pendingImport.groups);
-      } else {
-        $("resolve-status").textContent = "No papers found on Semantic Scholar.";
-      }
-      return;
-    }
-
-    if (Date.now() - (resolveState.updatedAt ?? 0) > STALE_MS) {
-      clearInterval(timer);
-      clearResolveState();
-      $("resolve-status").textContent = "Search was interrupted. Go back and try again.";
-      return;
-    }
-
-    setProgress("resolve", resolveState.current, resolveState.total, resolveState.label ?? "");
-  }, POLL_MS);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Polling — import
-// ─────────────────────────────────────────────────────────────────────────────
-
-function pollImportState() {
-  const POLL_MS    = 1000;
-  const STALE_MS   = 60000;
-
-  const timer = setInterval(async () => {
-    const { importState } = await new Promise(r =>
-      chrome.storage.local.get("importState", r)
-    );
-
-    if (!importState || importState.status !== "running") {
-      clearInterval(timer);
-      if (importState?.status === "done") {
-        displayImportResults(importState.results);
-      } else if (importState?.status === "error") {
-        $("import-status").textContent = "Import failed.";
-        setError("import-error", importState.error ?? "Unknown error");
-        $("btn-retry-import").classList.remove("hidden");
-      }
-      return;
-    }
-
-    if (Date.now() - (importState.updatedAt ?? 0) > STALE_MS) {
-      clearInterval(timer);
-      clearImportState();
-      $("import-status").textContent = "Import was interrupted (extension restarted?).";
-      setError("import-error",
-        "Background import stopped responding. Click Retry Import to try again."
-      );
-      $("btn-retry-import").classList.remove("hidden");
-      return;
-    }
-
-    setProgress("import", importState.current, importState.total, importState.label);
-    if (importState.folderName) {
-      $("import-status").textContent = `Importing "${importState.folderName}"…`;
-    }
-  }, POLL_MS);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 0 — Credentials
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function initStep0() {
-  const saved = await loadStorage();
-  if (saved.zoteroId)  $("zotero-id").value  = saved.zoteroId;
-  if (saved.zoteroKey) $("zotero-key").value = saved.zoteroKey;
-  if (saved.s2Key)     $("s2-key").value     = saved.s2Key;
-
-  const { loggedIn } = await sendBg({ type: "CHECK_S2_LOGIN" });
-  const dot  = $("s2-status-dot");
-  const text = $("s2-status-text");
-  if (loggedIn) {
-    dot.className = "dot ok";
-    text.textContent = "Logged in to Semantic Scholar ✓";
-  } else {
-    dot.className = "dot error";
-    text.innerHTML =
-      'Not logged in to Semantic Scholar — ' +
-      '<a href="https://www.semanticscholar.org/sign-in" target="_blank" ' +
-      'style="color:#1a1a6e">Log in →</a> then reopen this popup.';
-  }
-
-  $("btn-verify").addEventListener("click", onVerify);
-  $("btn-test-s2-key").addEventListener("click", onTestS2Key);
-}
-
-async function onTestS2Key() {
-  const s2Key = $("s2-key").value.trim();
-  const btn = $("btn-test-s2-key");
-  const status = $("s2-key-status");
-
-  if (!s2Key) {
-    status.textContent = "Please enter an API key first.";
-    status.className = "hint error-text";
-    status.classList.remove("hidden");
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = "…";
-  status.classList.add("hidden");
-
-  const res = await sendBg({ type: "CHECK_S2_KEY", s2ApiKey: s2Key });
-
-  if (res.valid) {
-    status.textContent = res.reason === "rate_limited"
-      ? "✓ Key is valid (rate limited right now, will work)"
-      : "✓ Key is valid";
-    status.className = "hint ok-text";
-  } else {
-    const msg = res.reason === "unauthorized"
-      ? "✗ Key is invalid (unauthorized)"
-      : res.reason === "empty"
-      ? "✗ No key entered"
-      : `✗ Test failed: ${res.reason}`;
-    status.textContent = msg;
-    status.className = "hint error-text";
-  }
-  status.classList.remove("hidden");
-
-  btn.disabled = false;
-  btn.textContent = "Test";
-}
-
-async function onVerify() {
-  const libraryId = $("zotero-id").value.trim();
-  const apiKey    = $("zotero-key").value.trim();
-  const s2Key     = $("s2-key").value.trim();
-
-  if (!libraryId || !apiKey) {
-    setError("cred-error", "Please enter your Zotero Library ID and API key.");
-    return;
-  }
-
-  const btn = $("btn-verify");
-  btn.disabled    = true;
-  btn.textContent = "Verifying…";
-  setError("cred-error", null);
-
-  try {
-    const res = await sendBg({ type: "GET_COLLECTIONS", libraryId, apiKey });
-    if (res.error) throw new Error(res.error);
-
-    state.zoteroId    = libraryId;
-    state.zoteroKey   = apiKey;
-    state.s2Key       = s2Key;
-    state.collections = res.collections;
-    saveStorage({ zoteroId: libraryId, zoteroKey: apiKey, s2Key, collections: res.collections });
-
-    mountTree(res.collections);
-    showPanel(1);
-  } catch (err) {
-    setError("cred-error", `Zotero connection failed: ${err.message}`);
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = "Verify & Continue →";
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 1 — Collection tree
-// ─────────────────────────────────────────────────────────────────────────────
+let cachedCollections = [];
 
 function buildTree(collections) {
   const map = {};
@@ -302,8 +72,8 @@ function renderTreeNode(node, parentKey) {
   const cb = document.createElement("input");
   cb.type = "checkbox";
   cb.id   = `cb-${node.key}`;
-  cb.className        = "tree-cb";
-  cb.dataset.key      = node.key;
+  cb.className         = "tree-cb";
+  cb.dataset.key       = node.key;
   cb.dataset.parentKey = parentKey ?? "";
 
   const lbl = document.createElement("label");
@@ -315,9 +85,8 @@ function renderTreeNode(node, parentKey) {
   row.append(toggle, cb, lbl);
   item.appendChild(row);
 
-  let childrenDiv = null;
   if (node.children.length) {
-    childrenDiv = document.createElement("div");
+    const childrenDiv = document.createElement("div");
     childrenDiv.className = "tree-children collapsed";
     for (const child of node.children) {
       childrenDiv.appendChild(renderTreeNode(child, node.key));
@@ -332,13 +101,12 @@ function renderTreeNode(node, parentKey) {
   }
 
   cb.addEventListener("change", () => {
-    // Cascade to all descendants
     item.querySelectorAll(".tree-cb").forEach(c => {
       c.checked = cb.checked;
       c.indeterminate = false;
     });
-    // Propagate indeterminate state up
     updateAncestors(cb.dataset.parentKey);
+    updateStartButton();
   });
 
   return item;
@@ -356,224 +124,263 @@ function updateAncestors(parentKey) {
   const childCbs = Array.from(
     childrenDiv.querySelectorAll(":scope > .tree-item > .tree-row > .tree-cb")
   );
-  const checkedCount = childCbs.filter(c => c.checked && !c.indeterminate).length;
-  const indeterCount = childCbs.filter(c => c.indeterminate).length;
+  const checked = childCbs.filter(c => c.checked && !c.indeterminate).length;
+  const indet   = childCbs.filter(c => c.indeterminate).length;
 
-  if (checkedCount === childCbs.length && indeterCount === 0) {
-    parentCb.checked = true;
-    parentCb.indeterminate = false;
-  } else if (checkedCount === 0 && indeterCount === 0) {
-    parentCb.checked = false;
-    parentCb.indeterminate = false;
+  if (checked === childCbs.length && indet === 0) {
+    parentCb.checked = true; parentCb.indeterminate = false;
+  } else if (checked === 0 && indet === 0) {
+    parentCb.checked = false; parentCb.indeterminate = false;
   } else {
-    parentCb.checked = false;
-    parentCb.indeterminate = true;
+    parentCb.checked = false; parentCb.indeterminate = true;
   }
-
   updateAncestors(parentCb.dataset.parentKey);
 }
 
 function mountTree(collections) {
+  cachedCollections = collections;
   const container = $("collection-tree");
   container.innerHTML = "";
-  const roots = buildTree(collections);
-  for (const root of roots) container.appendChild(renderTreeNode(root, ""));
+  for (const root of buildTree(collections)) {
+    container.appendChild(renderTreeNode(root, ""));
+  }
+  $("tree-wrap").classList.remove("hidden");
+  $("collections-loading").classList.add("hidden");
+  updateStartButton();
 }
 
 function getSelectedKeys() {
   return Array.from(document.querySelectorAll(".tree-cb:checked")).map(cb => cb.dataset.key);
 }
 
-function initStep1() {
-  $("btn-back-0").addEventListener("click", () => showPanel(0));
-  $("btn-load-papers").addEventListener("click", onLoadPapers);
+function updateStartButton() {
+  $("btn-start-job").disabled = getSelectedKeys().length === 0;
+}
+
+async function fetchAndMountCollections(libraryId, apiKey) {
+  $("collections-loading").classList.remove("hidden");
+  $("tree-wrap").classList.add("hidden");
+  setError("tree-error", null);
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "GET_COLLECTIONS", libraryId, apiKey });
+    if (res.error) throw new Error(res.error);
+    chrome.storage.local.set({ collections: res.collections });
+    mountTree(res.collections);
+  } catch (e) {
+    $("collections-loading").classList.add("hidden");
+    setError("tree-error", `Failed to load collections: ${e.message}`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 2 — Find Papers
+// Job state rendering (Panel 1)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function showResolveResults(groups) {
-  const foundTotal   = groups.reduce((s, g) => s + g.found.length, 0);
-  const missingTotal = groups.reduce((s, g) => s + g.missing.length, 0);
-  const allMissing   = groups.flatMap(g => g.missing);
-  const foldersWithPapers = groups.filter(g => g.found.length).length;
+function showFindStats(findStats) {
+  $("found-count").textContent   = findStats.found;
+  $("missing-count").textContent = findStats.missing;
+  $("find-result").classList.remove("hidden");
 
-  setProgress("resolve", 1, 1, "");
-  $("resolve-status").textContent =
-    `Search complete! ${foldersWithPapers} S2 folder(s) will be created.`;
-  $("found-count").textContent   = foundTotal;
-  $("missing-count").textContent = missingTotal;
-  $("resolve-result").classList.remove("hidden");
-
-  if (allMissing.length) {
+  if (findStats.missingTitles?.length) {
     $("missing-details").classList.remove("hidden");
     const ul = $("missing-list");
     ul.innerHTML = "";
-    for (const t of allMissing) {
+    for (const t of findStats.missingTitles) {
       const li = document.createElement("li");
       li.textContent = t;
       ul.appendChild(li);
     }
   }
-
-  if (foundTotal) $("btn-start-import").classList.remove("hidden");
 }
 
-async function onLoadPapers() {
-  const selectedKeys = getSelectedKeys();
-  if (!selectedKeys.length) return;
+function showImportResults(r) {
+  $("res-ok").textContent     = r.ok;
+  $("res-already").textContent = r.already;
+  $("res-fail").textContent   = r.fail;
+  $("import-result").classList.remove("hidden");
 
-  showPanel(2);
-  $("resolve-status").textContent = "Fetching papers from Zotero…";
-  setProgress("resolve", 0, 1, "");
-
-  const papersRes = await sendBg({
-    type:           "GET_PAPERS",
-    libraryId:      state.zoteroId,
-    apiKey:         state.zoteroKey,
-    collectionKeys: selectedKeys,
-    allCollections: state.collections,
-  });
-
-  if (papersRes.error) {
-    $("resolve-status").textContent = "Error fetching papers.";
-    return;
+  if (r.failedIds?.length) {
+    $("failed-section").classList.remove("hidden");
+    const ul = $("failed-list");
+    ul.innerHTML = "";
+    for (const fid of r.failedIds) {
+      const li  = document.createElement("li");
+      const url = `https://www.semanticscholar.org/paper/${fid}`;
+      li.innerHTML = `<a href="${url}" target="_blank">${fid}</a>`;
+      ul.appendChild(li);
+    }
   }
-
-  const groups = papersRes.groups ?? [];
-  if (!groups.length) {
-    $("resolve-status").textContent = "No papers found in selected collections.";
-    return;
-  }
-
-  const totalPapers = groups.reduce((s, g) => s + g.papers.length, 0);
-  $("resolve-status").textContent =
-    `Searching S2 for ${totalPapers} papers across ${groups.length} folder(s)…`;
-  setProgress("resolve", 0, totalPapers, "Starting…");
-
-  const progressHandler = msg => {
-    if (msg.type !== "PROGRESS" || msg.phase !== "resolve") return;
-    setProgress("resolve", msg.current, msg.total, msg.label);
-  };
-  chrome.runtime.onMessage.addListener(progressHandler);
-
-  const res = await sendBg({
-    type:     "RESOLVE_PAPERS",
-    groups,
-    s2ApiKey: state.s2Key || null,
-  });
-
-  chrome.runtime.onMessage.removeListener(progressHandler);
-  clearResolveState();
-
-  if (res.error) {
-    $("resolve-status").textContent = `Error: ${res.error}`;
-    return;
-  }
-
-  state.groups = res.groups;
-  showResolveResults(res.groups);
 }
 
-function initStep2() {
-  $("btn-back-1").addEventListener("click", () => {
-    clearResolveState();
-    showPanel(1);
-    $("resolve-result").classList.add("hidden");
-    $("missing-details").classList.add("hidden");
-    $("btn-start-import").classList.add("hidden");
-    setProgress("resolve", 0, 1, "");
-  });
+function renderJobState(js) {
+  setError("job-error", null);
 
-  $("btn-start-import").addEventListener("click", onImport);
-  $("btn-retry-import").addEventListener("click", () => {
-    $("btn-retry-import").classList.add("hidden");
-    setError("import-error", null);
-    onImport();
-  });
+  // ── Find section ──
+  switch (js.status) {
+    case "fetching":
+      $("find-status").textContent = "Fetching papers from Zotero…";
+      setProgress("find", 0, 1, "");
+      break;
+    case "finding":
+      $("find-status").textContent = "Searching Semantic Scholar…";
+      setProgress("find", js.findCurrent, js.findTotal, js.findLabel ?? "");
+      break;
+    default:
+      // importing / done / error — find is complete
+      $("find-status").textContent = "Search complete.";
+      setProgress("find", js.findTotal ?? 1, js.findTotal ?? 1, "");
+      if (js.findStats) showFindStats(js.findStats);
+
+      // Reveal import section
+      $("section-import").classList.remove("hidden");
+  }
+
+  // ── Import section ──
+  if (js.status === "importing") {
+    $("import-status").textContent =
+      js.importFolderName ? `Importing "${js.importFolderName}"…` : "Importing…";
+    setProgress("import", js.importCurrent ?? 0, js.importTotal ?? 1, js.importLabel ?? "");
+  } else if (js.status === "done") {
+    $("import-status").textContent = "Import complete!";
+    setProgress("import", js.importTotal ?? 1, js.importTotal ?? 1, "");
+    if (js.importResults) showImportResults(js.importResults);
+    $("btn-done").classList.remove("hidden");
+    $("btn-cancel").classList.add("hidden");
+  } else if (js.status === "error") {
+    const errMsg = js.error === "NOT_LOGGED_IN"
+      ? "Not logged in to Semantic Scholar. Please log in, then try again."
+      : js.error === "CREDENTIALS_MISSING"
+      ? "Credentials not configured. Open Settings to set them up."
+      : js.error ?? "An unknown error occurred.";
+    $("import-status").textContent = "Import failed.";
+    setError("job-error", errMsg);
+    $("btn-done").textContent = "Start Over";
+    $("btn-done").classList.remove("hidden");
+    $("btn-cancel").classList.add("hidden");
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 3 — Import
+// Polling
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function onImport() {
-  clearImportState();
-  showPanel(3);
-  $("btn-retry-import").classList.add("hidden");
+let pollTimer = null;
+const STALE_MS = 120000;
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    const { jobState } = await loadStorage(["jobState"]);
+
+    if (!jobState) {
+      // Job was cancelled or cleared
+      stopPolling();
+      resetPanel1();
+      showPanel(0);
+      return;
+    }
+
+    renderJobState(jobState);
+
+    if (jobState.status === "done" || jobState.status === "error") {
+      stopPolling();
+      return;
+    }
+
+    // Stale check (background service worker was killed)
+    if (["fetching", "finding", "importing"].includes(jobState.status)) {
+      if (Date.now() - (jobState.updatedAt ?? 0) > STALE_MS) {
+        stopPolling();
+        setError("job-error",
+          "The background job stopped responding (extension may have been restarted). " +
+          "Click Start Over to try again."
+        );
+        $("btn-done").textContent = "Start Over";
+        $("btn-done").classList.remove("hidden");
+        $("btn-cancel").classList.add("hidden");
+      }
+    }
+  }, 1000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function resetPanel1() {
+  // Reset all job UI to initial state
+  $("find-status").textContent  = "Starting…";
+  $("import-status").textContent = "Waiting…";
+  setProgress("find",   0, 1, "");
+  setProgress("import", 0, 1, "");
+  $("find-result").classList.add("hidden");
+  $("missing-details").classList.add("hidden");
+  $("section-import").classList.add("hidden");
   $("import-result").classList.add("hidden");
   $("failed-section").classList.add("hidden");
-  setError("import-error", null);
-
-  const totalFound        = state.groups.reduce((s, g) => s + g.found.length, 0);
-  const foldersWithPapers = state.groups.filter(g => g.found.length).length;
-  $("import-status").textContent =
-    `Importing ${totalFound} papers into ${foldersWithPapers} S2 folder(s)…`;
-  setProgress("import", 0, 1, "Connecting to Semantic Scholar…");
-
-  const progressHandler = msg => {
-    if (msg.type !== "PROGRESS" || msg.phase !== "import") return;
-    setProgress("import", msg.current, msg.total, msg.label);
-  };
-  chrome.runtime.onMessage.addListener(progressHandler);
-
-  pollImportState();
-
-  const res = await sendBg({
-    type:   "IMPORT_PAPERS",
-    groups: state.groups,
-  });
-
-  chrome.runtime.onMessage.removeListener(progressHandler);
-
-  if (res.error) {
-    $("import-status").textContent = "Import failed.";
-    clearImportState();
-    if (res.error === "NO_S2_TAB") {
-      setError("import-error",
-        "Please open semanticscholar.org in a browser tab first, then click Retry Import."
-      );
-    } else if (res.error === "NOT_LOGGED_IN") {
-      setError("import-error",
-        "Not logged in to Semantic Scholar. Please log in and click Retry Import."
-      );
-    } else if (res.error.includes("Content script did not respond")) {
-      setError("import-error",
-        "Could not connect to Semantic Scholar tab. Wait for it to load, then click Retry Import."
-      );
-    } else {
-      setError("import-error", `Error: ${res.error}`);
-    }
-    $("btn-retry-import").classList.remove("hidden");
-    return;
-  }
-
-  displayImportResults(res);
+  setError("job-error", null);
+  $("btn-done").textContent = "Done";
+  $("btn-done").classList.add("hidden");
+  $("btn-cancel").classList.remove("hidden");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Restart
+// Panel 0 — Collection picker
 // ─────────────────────────────────────────────────────────────────────────────
 
-function initRestart() {
-  $("btn-restart").addEventListener("click", () => {
-    clearPendingImport();
-    clearImportState();
-    state.groups = [];
+function initPanel0() {
+  $("btn-settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
+  $("btn-open-settings").addEventListener?.("click", () => chrome.runtime.openOptionsPage());
+  $("btn-refresh-collections").addEventListener("click", async () => {
+    const saved = await loadStorage(["zoteroId", "zoteroKey"]);
+    if (saved.zoteroId && saved.zoteroKey) {
+      fetchAndMountCollections(saved.zoteroId, saved.zoteroKey);
+    }
+  });
+
+  $("btn-start-job").addEventListener("click", async () => {
+    const selectedKeys = getSelectedKeys();
+    if (!selectedKeys.length) return;
+
+    // Transition to panel 1 immediately
+    resetPanel1();
+    showPanel(1);
+    $("find-status").textContent = "Fetching papers from Zotero…";
+
+    // Fire START_JOB — don't await (job runs entirely in background)
+    chrome.runtime.sendMessage({
+      type:           "START_JOB",
+      collectionKeys: selectedKeys,
+    }).catch(() => {});
+
+    // Start polling storage for progress
+    startPolling();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel 1 — Find & Import
+// ─────────────────────────────────────────────────────────────────────────────
+
+function initPanel1() {
+  $("btn-cancel").addEventListener("click", async () => {
+    $("btn-cancel").disabled = true;
+    $("btn-cancel").textContent = "Cancelling…";
+    chrome.runtime.sendMessage({ type: "CANCEL_JOB" }).catch(() => {});
+    // Poll will detect jobState disappearing and go back to panel 0
+  });
+
+  $("btn-done").addEventListener("click", () => {
+    clearJobState();
+    stopPolling();
+    resetPanel1();
+    // Uncheck all tree checkboxes
     document.querySelectorAll(".tree-cb").forEach(cb => {
       cb.checked = false;
       cb.indeterminate = false;
     });
-    $("resolve-result").classList.add("hidden");
-    $("missing-details").classList.add("hidden");
-    $("btn-start-import").classList.add("hidden");
-    $("import-result").classList.add("hidden");
-    $("failed-section").classList.add("hidden");
-    setError("import-error", null);
-    setProgress("resolve", 0, 1, "");
-    setProgress("import",  0, 1, "");
-    showPanel(1);
+    updateStartButton();
+    showPanel(0);
   });
 }
 
@@ -582,61 +389,51 @@ function initRestart() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 (async () => {
-  await initStep0();
-  initStep1();
-  initStep2();
-  initRestart();
+  initPanel0();
+  initPanel1();
 
-  const saved = await loadStorage();
+  const saved = await loadStorage(["zoteroId", "zoteroKey", "s2Key", "collections", "jobState"]);
 
-  function restoreCollections() {
+  // ── If a job is active, go straight to panel 1 ──────────────────────────
+  if (saved.jobState && saved.jobState.status !== "cancelled") {
+    // Restore collection tree in background (for when user returns to panel 0)
     if (saved.collections?.length) {
-      state.zoteroId    = saved.zoteroId    ?? "";
-      state.zoteroKey   = saved.zoteroKey   ?? "";
-      state.s2Key       = saved.s2Key       ?? "";
-      state.collections = saved.collections;
       mountTree(saved.collections);
     }
+    showPanel(1);
+    renderJobState(saved.jobState);
+    if (!["done", "error"].includes(saved.jobState.status)) {
+      startPolling();
+    }
+    return;
   }
 
-  if (saved.importState?.status === "running") {
-    restoreCollections();
-    showPanel(3);
-    $("import-status").textContent =
-      `Import running… (${saved.importState.current ?? 0}/${saved.importState.total ?? "?"})`;
-    setProgress("import",
-      saved.importState.current ?? 0,
-      saved.importState.total ?? 1,
-      saved.importState.label ?? ""
-    );
-    pollImportState();
-  } else if (saved.importState?.status === "done") {
-    restoreCollections();
-    showPanel(3);
-    displayImportResults(saved.importState.results);
-    clearImportState();
-  } else if (saved.pendingImport?.groups?.length) {
-    state.groups = saved.pendingImport.groups;
-    restoreCollections();
-    clearResolveState();
-    showPanel(2);
-    showResolveResults(saved.pendingImport.groups);
-    $("resolve-status").textContent =
-      `Search complete! (restored) — ${saved.pendingImport.groups.filter(g => g.found.length).length} S2 folder(s) ready.`;
-  } else if (saved.resolveState?.status === "running") {
-    restoreCollections();
-    showPanel(2);
-    $("resolve-status").textContent = "Finding papers… (resumed)";
-    setProgress("resolve",
-      saved.resolveState.current ?? 0,
-      saved.resolveState.total ?? 1,
-      saved.resolveState.label ?? ""
-    );
-    pollResolveState();
-  } else if (saved.zoteroId && saved.zoteroKey && saved.collections?.length) {
-    restoreCollections();
-    showPanel(1);
-  } else {
+  // ── No active job — show collection picker ───────────────────────────────
+  if (!saved.zoteroId || !saved.zoteroKey) {
+    // No credentials set
+    $("no-creds-notice").classList.remove("hidden");
+    $("btn-open-settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
     showPanel(0);
+    return;
+  }
+
+  showPanel(0);
+
+  if (saved.collections?.length) {
+    // Use cached tree immediately, then silently refresh in background
+    mountTree(saved.collections);
+    chrome.runtime.sendMessage({
+      type: "GET_COLLECTIONS",
+      libraryId: saved.zoteroId,
+      apiKey: saved.zoteroKey,
+    }).then(res => {
+      if (!res.error && res.collections?.length) {
+        chrome.storage.local.set({ collections: res.collections });
+        mountTree(res.collections);
+      }
+    }).catch(() => {});
+  } else {
+    // No cache — fetch fresh
+    fetchAndMountCollections(saved.zoteroId, saved.zoteroKey);
   }
 })();

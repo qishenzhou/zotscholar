@@ -16,13 +16,27 @@ header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px 12px;
+  padding: 12px 14px 10px;
   background: linear-gradient(135deg, #1a1a6e 0%, #2b3a8e 100%);
   color: white;
 }
-.logo { font-size: 26px; line-height: 1; }
-h1    { font-size: 14px; font-weight: 700; letter-spacing: 0.2px; }
-.subtitle { font-size: 11px; opacity: 0.75; margin-top: 2px; }
+.logo { font-size: 24px; line-height: 1; flex-shrink: 0; }
+.header-text { flex: 1; min-width: 0; }
+h1    { font-size: 13.5px; font-weight: 700; letter-spacing: 0.2px; }
+.subtitle { font-size: 10.5px; opacity: 0.75; margin-top: 2px; }
+
+.btn-settings {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  padding: 4px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.btn-settings:hover { background: rgba(255,255,255,0.25); }
 
 /* ── Step indicators ───────────────────────────────────────────────────── */
 .steps {
@@ -50,55 +64,56 @@ h1    { font-size: 14px; font-weight: 700; letter-spacing: 0.2px; }
 
 /* ── Panels ────────────────────────────────────────────────────────────── */
 .panel {
-  padding: 14px 16px 4px;
+  padding: 12px 14px 4px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 .hidden { display: none !important; }
 
-/* ── Form controls ─────────────────────────────────────────────────────── */
-label {
+/* ── No-creds notice ───────────────────────────────────────────────────── */
+.notice {
+  padding: 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-weight: 600;
-  font-size: 12px;
-  color: #374151;
-}
-input[type="text"],
-input[type="password"] {
-  width: 100%;
-  padding: 7px 9px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  gap: 10px;
+  align-items: center;
   font-size: 12.5px;
-  background: white;
-  color: #111827;
-  outline: none;
-  transition: border-color 0.15s;
-}
-input:focus {
-  border-color: #1a1a6e;
-  box-shadow: 0 0 0 2px rgba(26,26,110,0.12);
+  color: #92400e;
 }
 
-/* ── Collection tree ───────────────────────────────────────────── */
+/* ── Collection tree ───────────────────────────────────────────────────── */
 .tree-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   font-weight: 600;
   font-size: 12px;
   color: #374151;
 }
+.tree-header-right { display: flex; align-items: center; gap: 6px; }
 .tree-hint { font-size: 10.5px; font-weight: 400; color: #9ca3af; }
+.btn-refresh {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.btn-refresh:hover { color: #1a1a6e; background: #f3f4f6; }
 
 .collection-tree {
   border: 1px solid #d1d5db;
   border-radius: 6px;
   background: white;
-  max-height: 260px;
+  max-height: 240px;
   overflow-y: auto;
   padding: 3px 0;
 }
@@ -133,6 +148,22 @@ input:focus {
 .tree-children { padding-left: 18px; }
 .tree-children.collapsed { display: none; }
 
+/* ── Form controls ─────────────────────────────────────────────────────── */
+input[type="text"], input[type="password"] {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12.5px;
+  background: white;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus {
+  border-color: #1a1a6e;
+  box-shadow: 0 0 0 2px rgba(26,26,110,0.12);
+}
 .hint {
   font-size: 11px;
   color: #6b7280;
@@ -140,7 +171,6 @@ input:focus {
   line-height: 1.5;
 }
 .hint a { color: #1a1a6e; }
-.optional { font-weight: 400; color: #9ca3af; }
 
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .btn-primary, .btn-secondary {
@@ -152,52 +182,48 @@ input:focus {
   cursor: pointer;
   transition: opacity 0.15s, transform 0.1s;
 }
-.btn-primary {
-  background: #1a1a6e;
-  color: white;
-}
-.btn-secondary {
-  background: #e5e7eb;
-  color: #374151;
-}
-.btn-primary:hover  { opacity: 0.88; }
+.btn-primary { background: #1a1a6e; color: white; }
+.btn-secondary { background: #e5e7eb; color: #374151; }
+.btn-primary:hover   { opacity: 0.88; }
 .btn-secondary:hover { opacity: 0.80; }
 .btn-primary:active, .btn-secondary:active { transform: scale(0.97); }
-.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.row { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding-bottom: 4px; }
 
-.row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-end;
-}
+/* ── Job sections (Find & Import) ──────────────────────────────────────── */
+.job-section { display: flex; flex-direction: column; gap: 6px; }
 
-/* ── S2 login status ───────────────────────────────────────────────────── */
-.s2-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: #f1f5f9;
-  border-radius: 7px;
+.section-label {
   font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.dot {
-  width: 9px; height: 9px;
+.section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
+  background: #1a1a6e;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
   flex-shrink: 0;
 }
-.dot.ok      { background: #16a34a; }
-.dot.error   { background: #dc2626; }
-.dot.unknown { background: #9ca3af; animation: pulse 1.2s infinite; }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.35; }
+.section-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 0;
 }
 
+.status-row { font-size: 12px; color: #374151; }
+
 /* ── Progress ──────────────────────────────────────────────────────────── */
-.status-row { font-size: 12.5px; font-weight: 600; color: #374151; }
 .progress-wrap {
   height: 6px;
   background: #e5e7eb;
@@ -208,7 +234,7 @@ input:focus {
   height: 100%;
   background: linear-gradient(90deg, #1a1a6e, #4f6ef7);
   border-radius: 99px;
-  transition: width 0.3s ease;
+  transition: width 0.4s ease;
 }
 .progress-label { font-size: 11px; color: #6b7280; min-height: 16px; }
 
@@ -230,14 +256,13 @@ input:focus {
 .badge.green { background: #16a34a; }
 .badge.red   { background: #dc2626; }
 
-details { margin-top: 6px; font-size: 11.5px; }
+details { margin-top: 4px; font-size: 11.5px; }
 summary { cursor: pointer; color: #374151; font-weight: 600; }
-details ul { margin: 6px 0 0 16px; color: #6b7280; line-height: 1.7; }
+details ul { margin: 5px 0 0 16px; color: #6b7280; line-height: 1.7; }
 
-/* ── Import result metrics ─────────────────────────────────────────────── */
+/* ── Metrics ───────────────────────────────────────────────────────────── */
 .metrics {
   display: flex;
-  gap: 0;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;
@@ -247,46 +272,16 @@ details ul { margin: 6px 0 0 16px; color: #6b7280; line-height: 1.7; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 6px 8px;
+  padding: 8px 4px 6px;
   border-right: 1px solid #e5e7eb;
   background: white;
 }
 .metric:last-child { border-right: none; }
-.metric-value {
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1;
-}
-.metric-label { font-size: 10.5px; color: #6b7280; margin-top: 3px; }
+.metric-value { font-size: 20px; font-weight: 800; line-height: 1; }
+.metric-label { font-size: 10px; color: #6b7280; margin-top: 3px; }
 .metric-value.green { color: #16a34a; }
 .metric-value.grey  { color: #6b7280; }
 .metric-value.red   { color: #dc2626; }
-
-/* ── Inline input row (input + button side by side) ───────────────────── */
-.input-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.input-row input { flex: 1; }
-.btn-inline {
-  padding: 6px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #374151;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.15s;
-}
-.btn-inline:hover    { background: #f3f4f6; }
-.btn-inline:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.ok-text    { color: #16a34a !important; }
-.error-text { color: #b91c1c !important; }
 
 /* ── Error ─────────────────────────────────────────────────────────────── */
 .error {

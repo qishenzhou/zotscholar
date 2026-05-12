@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Zotero → Semantic Scholar",
-  "version": "1.4.0",
-  "description": "Import a Zotero collection into your Semantic Scholar Library folder for daily paper recommendations.",
+  "version": "1.5.0",
+  "description": "Import Zotero collections into your Semantic Scholar Library, preserving folder structure.",
+
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
 
   "permissions": ["cookies", "storage", "scripting", "tabs"],
   "host_permissions": [

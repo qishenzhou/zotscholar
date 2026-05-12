@@ -390,18 +390,6 @@ async function getReachableS2TabIdIfAvailable() {
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function sendProgress(phase, current, total, label = "") {
-  chrome.runtime.sendMessage({ type: "PROGRESS", phase, current, total, label }).catch(() => {});
-}
-
-function setImportState(data) {
-  chrome.storage.local.set({ importState: { ...data, updatedAt: Date.now() } });
-}
-
-function clearImportState() {
-  chrome.storage.local.remove("importState");
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Main message handler
 // ─────────────────────────────────────────────────────────────────────────────
@@ -413,120 +401,136 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
+async function isCancelled() {
+  const { cancelRequested } = await new Promise(r =>
+    chrome.storage.local.get("cancelRequested", r)
+  );
+  if (cancelRequested) {
+    await chrome.storage.local.remove(["jobState", "cancelRequested"]);
+  }
+  return !!cancelRequested;
+}
+
+function setJobState(data) {
+  chrome.storage.local.set({ jobState: { ...data, updatedAt: Date.now() } });
+}
+
 async function handle(msg) {
   switch (msg.type) {
 
     case "GET_COLLECTIONS":
       return { collections: await getCollections(msg.libraryId, msg.apiKey) };
 
-    case "GET_PAPERS": {
-      const keys     = msg.collectionKeys ?? (msg.collectionKey ? [msg.collectionKey] : []);
-      const expanded = msg.allCollections
-        ? expandCollectionKeys(keys, msg.allCollections)
-        : keys;
-      const keyToName = Object.fromEntries(
-        (msg.allCollections ?? []).map(c => [c.key, c.name])
-      );
-      const groups = [];
-      for (const key of expanded) {
-        const papers = await getPapers(msg.libraryId, msg.apiKey, key);
-        if (papers.length > 0) {
-          groups.push({ key, name: keyToName[key] ?? key, papers });
-        }
-      }
-      return { groups };
-    }
-
     case "CHECK_S2_LOGIN":
       return { loggedIn: await checkS2Login() };
 
-    case "CHECK_S2_KEY": {
-      if (!msg.s2ApiKey) return { valid: false, reason: "empty" };
-      try {
-        const r = await fetch(
-          `${S2_PUBLIC}/paper/search?query=deep+learning&fields=paperId&limit=1`,
-          { headers: { "x-api-key": msg.s2ApiKey } }
-        );
-        if (r.ok) return { valid: true };
-        if (r.status === 401 || r.status === 403) return { valid: false, reason: "unauthorized" };
-        if (r.status === 429) return { valid: true, reason: "rate_limited" }; // key is real, just hit limit
-        return { valid: false, reason: `http_${r.status}` };
-      } catch (e) {
-        return { valid: false, reason: e.message };
+    case "START_JOB": {
+      // Read credentials and cached collection tree from storage
+      const stored = await new Promise(r =>
+        chrome.storage.local.get(["zoteroId", "zoteroKey", "s2Key", "collections"], r)
+      );
+      const { zoteroId, zoteroKey, s2Key, collections: allCollections } = stored;
+
+      if (!zoteroId || !zoteroKey) {
+        setJobState({ status: "error", error: "CREDENTIALS_MISSING" });
+        return { error: "CREDENTIALS_MISSING" };
       }
-    }
 
-    case "RESOLVE_PAPERS": {
-      // msg.groups: [{key, name, papers: [{title, doi, arxivId}]}]
-      const groups = msg.groups ?? [];
-      const total  = groups.reduce((s, g) => s + g.papers.length, 0);
+      const expanded  = allCollections
+        ? expandCollectionKeys(msg.collectionKeys, allCollections)
+        : msg.collectionKeys;
+      const keyToName = Object.fromEntries((allCollections ?? []).map(c => [c.key, c.name]));
+
+      await chrome.storage.local.remove("cancelRequested");
+
+      // ── Phase 0: fetch papers from Zotero ────────────────────────────────
+      setJobState({ status: "fetching" });
+
+      const groups = [];
+      for (const key of expanded) {
+        if (await isCancelled()) return { cancelled: true };
+        const papers = await getPapers(zoteroId, zoteroKey, key);
+        if (papers.length > 0) groups.push({ key, name: keyToName[key] ?? key, papers });
+      }
+
+      if (!groups.length) {
+        await chrome.storage.local.remove("jobState");
+        return { error: "No papers found in selected collections" };
+      }
+
+      // ── Phase 1: find papers on S2 ───────────────────────────────────────
+      const findTotal = groups.reduce((s, g) => s + g.papers.length, 0);
+      setJobState({ status: "finding", findCurrent: 0, findTotal, findLabel: "" });
+
       const resultGroups = [];
-      let done = 0;
-
-      chrome.storage.local.set({
-        resolveState: { status: "running", current: 0, total, label: "", updatedAt: Date.now() },
-      });
+      let findDone = 0;
 
       for (const group of groups) {
         const found = [], missing = [];
         for (const p of group.papers) {
+          if (findDone % 5 === 0 && await isCancelled()) return { cancelled: true };
           const label = p.title.slice(0, 60);
-          sendProgress("resolve", done, total, label);
-          if (done % 5 === 0) {
-            chrome.storage.local.set({
-              resolveState: { status: "running", current: done, total, label, updatedAt: Date.now() },
-            });
+          if (findDone % 3 === 0) {
+            setJobState({ status: "finding", findCurrent: findDone, findTotal, findLabel: label });
           }
-          const pid = await findS2Id(p, msg.s2ApiKey ?? null);
+          const pid = await findS2Id(p, s2Key || null);
           if (pid) found.push({ id: pid, title: p.title });
-          else missing.push(p.title);
-          done++;
+          else     missing.push(p.title);
+          findDone++;
           await delay(200);
         }
         resultGroups.push({ key: group.key, name: group.name, found, missing });
       }
 
-      sendProgress("resolve", total, total, "");
+      const findStats = {
+        found:             resultGroups.reduce((s, g) => s + g.found.length, 0),
+        missing:           resultGroups.reduce((s, g) => s + g.missing.length, 0),
+        missingTitles:     resultGroups.flatMap(g => g.missing),
+        foldersWithPapers: resultGroups.filter(g => g.found.length).length,
+      };
+      const importTotal = findStats.found;
 
-      if (resultGroups.some(g => g.found.length > 0)) {
-        await chrome.storage.local.set({ pendingImport: { groups: resultGroups } });
+      if (importTotal === 0) {
+        setJobState({ status: "done", findStats, importTotal: 0,
+          importResults: { ok: 0, already: 0, fail: 0, failedIds: [] } });
+        return { findStats, importResults: { ok: 0, already: 0, fail: 0, failedIds: [] } };
       }
-      await chrome.storage.local.set({ resolveState: { status: "done" } });
 
-      return { groups: resultGroups };
-    }
-
-    case "IMPORT_PAPERS": {
+      // ── Phase 2: import into S2 ──────────────────────────────────────────
       const loggedIn = await checkS2Login();
-      if (!loggedIn) throw new Error("NOT_LOGGED_IN");
+      if (!loggedIn) {
+        setJobState({ status: "error", error: "NOT_LOGGED_IN", findStats });
+        throw new Error("NOT_LOGGED_IN");
+      }
 
-      // msg.groups: [{key, name, found: [{id, title}], missing: [...]}]
-      const groups = msg.groups ?? [];
-      const total  = groups.reduce((s, g) => s + g.found.length, 0);
+      setJobState({
+        status: "importing", findStats, findGroups: resultGroups,
+        importCurrent: 0, importTotal, importLabel: "", importFolderName: "",
+      });
 
       let ok = 0, already = 0, fail = 0;
       const failedIds = [];
-      let papersDone = 0;
+      let importDone = 0;
 
-      setImportState({ status: "running", current: 0, total, label: "", folderName: groups[0]?.name ?? "" });
-
-      for (const group of groups) {
+      for (const group of resultGroups) {
         if (!group.found.length) continue;
+        if (await isCancelled()) return { cancelled: true };
 
         const { folderId } = await s2Op("GET_OR_CREATE_FOLDER", { folderName: group.name });
 
         for (let i = 0; i < group.found.length; i++) {
           const paper = group.found[i];
           const label = `"${group.name}": ${i + 1}/${group.found.length}`;
-          sendProgress("import", papersDone, total, label);
-          if (papersDone % 5 === 0) {
-            setImportState({ status: "running", current: papersDone, total, label, folderName: group.name });
+          if (importDone % 3 === 0) {
+            setJobState({
+              status: "importing", findStats,
+              importCurrent: importDone, importTotal, importLabel: label,
+              importFolderName: group.name,
+            });
           }
           try {
             const { result } = await s2Op("ADD_PAPER", {
-              paperId:    paper.id,
-              paperTitle: paper.title,
-              folderId,
+              paperId: paper.id, paperTitle: paper.title, folderId,
             });
             if (result === "ok")           ok++;
             else if (result === "already") already++;
@@ -535,16 +539,19 @@ async function handle(msg) {
             fail++;
             failedIds.push(paper.id);
           }
-          papersDone++;
+          importDone++;
           await delay(300);
         }
       }
 
-      sendProgress("import", total, total, "");
-      const results = { ok, already, fail, failedIds };
-      setImportState({ status: "done", results });
-      return results;
+      const importResults = { ok, already, fail, failedIds };
+      setJobState({ status: "done", findStats, importTotal, importResults });
+      return { findStats, importResults };
     }
+
+    case "CANCEL_JOB":
+      await chrome.storage.local.set({ cancelRequested: true });
+      return { ok: true };
 
     default:
       throw new Error(`Unknown message type: ${msg.type}`);

@@ -86,22 +86,13 @@ Settings shows every collection that has been imported at least once. For each c
 
 ## Contributors
 
-<table>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/qishenzhou">
-        <img src="https://images.weserv.nl/?url=github.com/qishenzhou.png&h=64&w=64&mask=circle&maxage=7d" /><br/>
-        <sub><b>qishenzhou</b></sub>
-      </a>
-    </td>
-    <td align="center">
-      <a href="https://github.com/BeinuoYang">
-        <img src="https://images.weserv.nl/?url=github.com/BeinuoYang.png&h=64&w=64&mask=circle&maxage=7d" /><br/>
-        <sub><b>BeinuoYang</b></sub>
-      </a>
-    </td>
-  </tr>
-</table>
+<a href="https://github.com/qishenzhou">
+  <img src="https://images.weserv.nl/?url=github.com/qishenzhou.png&h=72&w=72&mask=circle&maxage=7d" title="qishenzhou" />
+</a>
+&nbsp;
+<a href="https://github.com/BeinuoYang">
+  <img src="https://images.weserv.nl/?url=github.com/BeinuoYang.png&h=72&w=72&mask=circle&maxage=7d" title="BeinuoYang" />
+</a>
 
 ---
 

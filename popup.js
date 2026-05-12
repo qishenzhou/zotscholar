@@ -263,6 +263,10 @@ function renderJobState(js) {
     if (js.importResults) showImportResults(js.importResults);
     $("btn-done").classList.remove("hidden");
     $("btn-cancel").classList.add("hidden");
+    // Show "Enable Research Feed" only when there are actual folders to update
+    if (js.importedFolderIds?.length > 0) {
+      $("btn-enable-feed").classList.remove("hidden");
+    }
   } else if (js.status === "error") {
     const errMsg = js.error === "NOT_LOGGED_IN"
       ? "Not logged in to Semantic Scholar. Please log in, then try again."
@@ -339,6 +343,9 @@ function resetPanel1() {
   setError("job-error", null);
   $("btn-done").textContent = "Done";
   $("btn-done").classList.add("hidden");
+  $("btn-enable-feed").classList.add("hidden");
+  $("btn-enable-feed").disabled = false;
+  $("btn-enable-feed").textContent = "Enable Research Feed";
   $("btn-cancel").classList.remove("hidden");
 }
 
@@ -388,17 +395,31 @@ function initPanel1() {
     // Poll will detect jobState disappearing and go back to panel 0
   });
 
-  $("btn-done").addEventListener("click", () => {
+  function finishAndReset() {
     clearJobState();
     stopPolling();
     resetPanel1();
-    // Uncheck all tree checkboxes
     document.querySelectorAll(".tree-cb").forEach(cb => {
       cb.checked = false;
       cb.indeterminate = false;
     });
     updateStartButton();
     showPanel(0);
+  }
+
+  $("btn-done").addEventListener("click", finishAndReset);
+
+  $("btn-enable-feed").addEventListener("click", async () => {
+    const btn = $("btn-enable-feed");
+    btn.disabled = true;
+    btn.textContent = "Enabling…";
+
+    const { jobState } = await loadStorage(["jobState"]);
+    const folderIds = jobState?.importedFolderIds ?? [];
+    if (folderIds.length > 0) {
+      await chrome.runtime.sendMessage({ type: "ENABLE_RECOMMENDATION", folderIds }).catch(() => {});
+    }
+    finishAndReset();
   });
 }
 

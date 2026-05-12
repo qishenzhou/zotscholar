@@ -119,6 +119,17 @@ if (window.__s2ZoteroExtLoaded) {
         return { result: "error", status: r.status, step: "bulk", detail: text.slice(0, 200) };
       }
 
+      case "SET_FOLDER_RECOMMENDATION": {
+        const r = await fetch(`/api/1/library/folders/${msg.folderId}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: jsonHeaders(),
+          body: JSON.stringify({ recommendationStatus: "On" }),
+        });
+        if (!r.ok) throw new Error(`set recommendation HTTP ${r.status}`);
+        return { ok: true };
+      }
+
       case "LIST_FOLDERS": {
         const r = await fetch("/api/1/library/folders", { credentials: "include" });
         if (r.status === 401 || r.status === 403) throw new Error("NOT_LOGGED_IN");

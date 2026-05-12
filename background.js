@@ -587,8 +587,21 @@ async function handle(msg) {
       // Persist watched-collection state for all processed groups
       await updateWatchedCollections(resultGroups, watchedCollections);
 
-      setJobState({ status: "done", findStats, importTotal: findStats.found, importResults });
+      const importedFolderIds = resultGroups
+        .filter(g => g.folderId && g.found.length > 0)
+        .map(g => g.folderId);
+
+      setJobState({ status: "done", findStats, importTotal: findStats.found, importResults, importedFolderIds });
       return { findStats, importResults };
+    }
+
+    case "ENABLE_RECOMMENDATION": {
+      const { folderIds = [] } = msg;
+      const results = await Promise.allSettled(
+        folderIds.map(id => s2Op("SET_FOLDER_RECOMMENDATION", { folderId: id }))
+      );
+      const failed = results.filter(r => r.status === "rejected").length;
+      return { ok: true, enabled: folderIds.length - failed, failed };
     }
 
     case "CANCEL_JOB":

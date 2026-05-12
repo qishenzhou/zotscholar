@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Zotero → Semantic Scholar</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <header>
+    <span class="logo">📚</span>
+    <div>
+      <h1>Zotero → Semantic Scholar</h1>
+      <p class="subtitle">Import a collection into your S2 Library</p>
+    </div>
+  </header>
+
+  <!-- Step indicators -->
+  <div class="steps" id="steps">
+    <div class="step active" data-step="0">1. Credentials</div>
+    <div class="step" data-step="1">2. Collection</div>
+    <div class="step" data-step="2">3. Find Papers</div>
+    <div class="step" data-step="3">4. Import</div>
+  </div>
+
+  <!-- ── STEP 0: Credentials ─────────────────────────────────────── -->
+  <div class="panel" id="panel-0">
+    <div class="s2-status" id="s2-status">
+      <span id="s2-status-dot" class="dot unknown"></span>
+      <span id="s2-status-text">Checking Semantic Scholar login…</span>
+    </div>
+
+    <label>
+      Zotero Library ID
+      <input type="text" id="zotero-id" placeholder="e.g. 1234567" />
+    </label>
+    <div class="hint">
+      <a href="https://www.zotero.org/settings/keys" target="_blank">zotero.org → Settings → Feeds/API</a>
+      — shown as "Your userID"
+    </div>
+
+    <label>
+      Zotero API Key
+      <input type="password" id="zotero-key" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxx" />
+    </label>
+    <div class="hint">
+      Same page → <b>Create new private key</b> (read-only is enough)
+    </div>
+
+    <label>
+      Semantic Scholar API Key <span class="optional">(optional)</span>
+      <div class="input-row">
+        <input type="password" id="s2-key" placeholder="faster lookups — get free key at s2 API page" />
+        <button class="btn-inline" id="btn-test-s2-key">Test</button>
+      </div>
+    </label>
+    <div id="s2-key-status" class="hint hidden"></div>
+
+    <div id="cred-error" class="error hidden"></div>
+    <button class="btn-primary" id="btn-verify">Verify &amp; Continue →</button>
+  </div>
+
+  <!-- ── STEP 1: Collection picker ──────────────────────────────── -->
+  <div class="panel hidden" id="panel-1">
+    <div class="tree-header">
+      Zotero Collections
+      <span class="tree-hint">▶ to expand sub-folders</span>
+    </div>
+    <div id="collection-tree" class="collection-tree"></div>
+    <div class="hint">Each selected folder (and its sub-folders) becomes a separate S2 folder.</div>
+
+    <div class="row">
+      <button class="btn-secondary" id="btn-back-0">← Re-verify / Refresh</button>
+      <button class="btn-primary" id="btn-load-papers">Load Papers →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: Resolve S2 IDs ─────────────────────────────────── -->
+  <div class="panel hidden" id="panel-2">
+    <div class="status-row">
+      <span id="resolve-status">Searching Semantic Scholar…</span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="resolve-bar" style="width:0%"></div>
+    </div>
+    <div class="progress-label" id="resolve-label"></div>
+
+    <div id="resolve-result" class="hidden">
+      <div class="result-row">
+        <span class="badge green" id="found-count">0</span> found on S2
+        <span class="badge red"   id="missing-count">0</span> not found (will be skipped)
+      </div>
+      <details id="missing-details" class="hidden">
+        <summary>Papers not found on Semantic Scholar</summary>
+        <ul id="missing-list"></ul>
+      </details>
+    </div>
+
+    <div class="row">
+      <button class="btn-secondary" id="btn-back-1">← Back</button>
+      <button class="btn-primary hidden" id="btn-start-import">Import to S2 Library →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: Import ─────────────────────────────────────────── -->
+  <div class="panel hidden" id="panel-3">
+    <div class="status-row">
+      <span id="import-status">Adding papers to library…</span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="import-bar" style="width:0%"></div>
+    </div>
+    <div class="progress-label" id="import-label"></div>
+
+    <div id="import-result" class="hidden">
+      <div class="metrics">
+        <div class="metric">
+          <span class="metric-value green" id="res-ok">0</span>
+          <span class="metric-label">Added</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value grey"  id="res-already">0</span>
+          <span class="metric-label">Already there</span>
+        </div>
+        <div class="metric">
+          <span class="metric-value red"   id="res-fail">0</span>
+          <span class="metric-label">Failed</span>
+        </div>
+      </div>
+      <div id="failed-section" class="hidden">
+        <details>
+          <summary>Failed paper IDs (add manually)</summary>
+          <ul id="failed-list"></ul>
+        </details>
+      </div>
+      <button class="btn-secondary" id="btn-restart">Start Over</button>
+    </div>
+
+    <div id="import-error" class="error hidden"></div>
+    <button class="btn-secondary hidden" id="btn-retry-import">Retry Import</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

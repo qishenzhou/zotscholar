@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Zotero → Semantic Scholar",
+  "version": "1.4.0",
+  "description": "Import a Zotero collection into your Semantic Scholar Library folder for daily paper recommendations.",
+
+  "permissions": ["cookies", "storage", "scripting", "tabs"],
+  "host_permissions": [
+    "https://www.semanticscholar.org/*",
+    "https://api.semanticscholar.org/*",
+    "https://api.zotero.org/*",
+    "https://api.openalex.org/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [{
+    "matches": ["https://www.semanticscholar.org/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Zotero → Semantic Scholar"
+  }
+}
